@@ -1,23 +1,57 @@
 {
   "name": "vscode-r-tutorials",
-  "displayName": "vscode-r-tutorials",
-  "description": "Browse and run R package tutorials",
+  "displayName": "R Tutorials",
+  "description": "Browse and run R package tutorials (learnr)",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.110.0"
+    "vscode": "^1.100.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onView:rTutorialsList"
+  ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "r-tutorials",
+          "title": "R Tutorials",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "r-tutorials": [
+        {
+          "id": "rTutorialsList",
+          "name": "Tutorials"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "vscode-r-tutorials.helloWorld",
-        "title": "Hello World"
+        "command": "rTutorials.runTutorial",
+        "title": "Run Tutorial",
+        "icon": "$(play)"
+      },
+      {
+        "command": "rTutorials.refresh",
+        "title": "Refresh Tutorials",
+        "icon": "$(refresh)"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "rTutorials.refresh",
+          "when": "view == rTutorialsList",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -28,13 +62,14 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.110.0",
+    "@types/vscode": "^1.100.0",
     "@types/mocha": "^10.0.10",
-    "@types/node": "22.x",
-    "typescript-eslint": "^8.56.1",
-    "eslint": "^9.39.3",
-    "typescript": "^5.9.3",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "eslint": "^9.16.0",
+    "typescript": "^5.7.2",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1"
   }
 }
