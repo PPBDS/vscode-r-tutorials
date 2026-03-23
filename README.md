@@ -1,6 +1,6 @@
 # R Tutorials for VS Code
 
-Browse and run R package tutorials (learnr) directly from the VS Code sidebar.
+Browse and run R package tutorials irectly from the VS Code sidebar.
 
 ## Features
 
@@ -20,11 +20,11 @@ Browse and run R package tutorials (learnr) directly from the VS Code sidebar.
 1. Click the R Tutorials icon in the Activity Bar
 2. Browse the list of available tutorials
 3. Use **⌥⌘F** (Mac) or **Ctrl+Alt+F** (Windows/Linux) to filter
-4. Click any tutorial to run it
+4. Click the arrow to the right of the tutorial name to run it
 
 ## Installation
 
-This extension is not yet published to the VS Code Marketplace. To install from source:
+To install from source:
 ```bash
 git clone https://github.com/PPBDS/vscode-r-tutorials.git
 cd vscode-r-tutorials
