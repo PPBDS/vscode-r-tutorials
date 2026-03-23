@@ -58,7 +58,7 @@ suite('R Tutorials Extension', () => {
         );
     });
 
-    test('TutorialItem should have a run command', () => {
+    test('TutorialItem should not have a single-click command', () => {
         const { TutorialItem } = require('../tutorialProvider');
 
         const item = new TutorialItem(
@@ -68,9 +68,7 @@ suite('R Tutorials Extension', () => {
             vscode.TreeItemCollapsibleState.None
         );
 
-        assert.ok(item.command, 'Item should have a command');
-        assert.strictEqual(item.command.command, 'rTutorials.runTutorial');
-        assert.deepStrictEqual(item.command.arguments, ['pkg', 'tut']);
+        assert.strictEqual(item.command, undefined, 'Item should not trigger on single click');
     });
 
     test('TutorialItem should have a play icon', () => {

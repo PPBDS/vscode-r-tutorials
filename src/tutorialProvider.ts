@@ -17,11 +17,6 @@ export class TutorialItem extends vscode.TreeItem {
         super(label, collapsibleState);
         this.tooltip = `${packageName} - ${tutorialId}`;
         this.description = '';
-        this.command = {
-            command: 'rTutorials.runTutorial',
-            title: 'Run Tutorial',
-            arguments: [packageName, tutorialId]
-        };
         this.iconPath = new vscode.ThemeIcon('play');
     }
 }

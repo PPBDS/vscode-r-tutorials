@@ -2,7 +2,7 @@
   "name": "vscode-r-tutorials",
   "displayName": "R Tutorials",
   "description": "Browse and run R package tutorials (learnr)",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "PPBDS",
   "repository": {
     "type": "git",
@@ -54,6 +54,13 @@
           "command": "rTutorials.refresh",
           "when": "view == rTutorialsList",
           "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "rTutorials.runTutorial",
+          "when": "view == rTutorialsList",
+          "group": "inline"
         }
       ]
     }

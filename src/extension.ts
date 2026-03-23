@@ -54,7 +54,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     const runTutorial = vscode.commands.registerCommand(
         'rTutorials.runTutorial',
-        async (packageName: string, tutorialId: string) => {
+        async (item: any) => {
+            if (!item || !item.packageName) { return; }
+            const packageName: string = item.packageName;
+            const tutorialId: string = item.tutorialId;
 
             const missing = await getMissingDeps(packageName, tutorialId);
 
