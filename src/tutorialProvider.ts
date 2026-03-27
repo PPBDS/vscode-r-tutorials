@@ -1,13 +1,26 @@
 import * as vscode from 'vscode';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import { runRScript } from './utils';
 
-const execAsync = promisify(exec);
+// ---------------------------------------------------------------------------
+// Tree items
+// ---------------------------------------------------------------------------
+
+export class PackageItem extends vscode.TreeItem {
+    public readonly contextValue = 'package';
+
+    constructor(
+        public readonly packageName: string,
+        public readonly tutorialCount: number
+    ) {
+        super(packageName, vscode.TreeItemCollapsibleState.Collapsed);
+        this.description = `${tutorialCount} tutorial${tutorialCount === 1 ? '' : 's'}`;
+        this.iconPath = new vscode.ThemeIcon('package');
+    }
+}
 
 export class TutorialItem extends vscode.TreeItem {
+    public readonly contextValue = 'tutorial';
+
     constructor(
         public readonly label: string,
         public readonly packageName: string,
@@ -15,41 +28,52 @@ export class TutorialItem extends vscode.TreeItem {
         public readonly collapsibleState: vscode.TreeItemCollapsibleState
     ) {
         super(label, collapsibleState);
-        this.tooltip = `${packageName} - ${tutorialId}`;
+        this.tooltip = `${packageName} — ${tutorialId}`;
         this.description = '';
         this.iconPath = new vscode.ThemeIcon('play');
     }
 }
+
+type TreeNode = PackageItem | TutorialItem;
+
+// ---------------------------------------------------------------------------
+// Internal data
+// ---------------------------------------------------------------------------
 
 interface TutorialEntry {
     packageName: string;
     tutorialId: string;
 }
 
-export class TutorialProvider implements vscode.TreeDataProvider<TutorialItem> {
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
 
-    private _onDidChangeTreeData: vscode.EventEmitter<TutorialItem | undefined | null | void> =
-        new vscode.EventEmitter<TutorialItem | undefined | null | void>();
-    readonly onDidChangeTreeData: vscode.Event<TutorialItem | undefined | null | void> =
+export class TutorialProvider implements vscode.TreeDataProvider<TreeNode> {
+
+    private _onDidChangeTreeData: vscode.EventEmitter<TreeNode | undefined | null | void> =
+        new vscode.EventEmitter<TreeNode | undefined | null | void>();
+    readonly onDidChangeTreeData: vscode.Event<TreeNode | undefined | null | void> =
         this._onDidChangeTreeData.event;
 
     private tutorials: TutorialEntry[] = [];
-    private rPath: string = 'Rscript';
+    private packageMap: Map<string, TutorialEntry[]> = new Map();
+    private rscriptPath: string = 'Rscript';
+    private treeView: vscode.TreeView<TreeNode> | undefined;
 
-    async initialize(): Promise<boolean> {
-        const rInstalled = await this.checkR();
-        if (!rInstalled) {
-            vscode.window.showErrorMessage(
-                'R is not installed or not found in PATH. Please install R to use this extension.',
-                'Download R'
-            ).then(selection => {
-                if (selection === 'Download R') {
-                    vscode.env.openExternal(vscode.Uri.parse('https://cran.r-project.org/'));
-                }
-            });
-            return false;
-        }
+    /** Call after creating the tree view so the provider can show loading messages. */
+    setTreeView(tv: vscode.TreeView<TreeNode>): void {
+        this.treeView = tv;
+    }
 
+    // -----------------------------------------------------------------------
+    // Initialization
+    // -----------------------------------------------------------------------
+
+    async initialize(rscriptPath: string): Promise<void> {
+        this.rscriptPath = rscriptPath;
+
+        // Check that learnr is installed
         const learnrInstalled = await this.checkLearnr();
         if (!learnrInstalled) {
             vscode.window.showErrorMessage(
@@ -61,26 +85,17 @@ export class TutorialProvider implements vscode.TreeDataProvider<TutorialItem> {
                     vscode.window.showInformationMessage('Command copied to clipboard.');
                 }
             });
-            return false;
+            return;
         }
 
         await this.loadTutorials();
-        return true;
-    }
-
-    private async checkR(): Promise<boolean> {
-        try {
-            await execAsync(`${this.rPath} --version`);
-            return true;
-        } catch {
-            return false;
-        }
     }
 
     private async checkLearnr(): Promise<boolean> {
         try {
-            const { stdout } = await execAsync(
-                `${this.rPath} -e "cat(requireNamespace('learnr', quietly = TRUE))"`
+            const { stdout } = await runRScript(
+                'cat(requireNamespace("learnr", quietly = TRUE))',
+                this.rscriptPath
             );
             return stdout.trim() === 'TRUE';
         } catch {
@@ -88,18 +103,15 @@ export class TutorialProvider implements vscode.TreeDataProvider<TutorialItem> {
         }
     }
 
-    private async runRScript(code: string): Promise<string> {
-        const tmpFile = path.join(os.tmpdir(), `r-tutorials-${Date.now()}.R`);
-        fs.writeFileSync(tmpFile, code, 'utf8');
-        try {
-            const { stdout } = await execAsync(`${this.rPath} "${tmpFile}"`);
-            return stdout;
-        } finally {
-            try { fs.unlinkSync(tmpFile); } catch {}
-        }
-    }
+    // -----------------------------------------------------------------------
+    // Loading tutorials
+    // -----------------------------------------------------------------------
 
     private async loadTutorials(): Promise<void> {
+        if (this.treeView) {
+            this.treeView.message = 'Loading tutorials…';
+        }
+
         try {
             const rCode =
 `tutorials <- learnr::available_tutorials()
@@ -107,7 +119,8 @@ for (i in seq_len(nrow(tutorials))) {
   cat(tutorials$package[i], "\\t", tutorials$name[i], "\\n", sep = "")
 }
 `;
-            const stdout = await this.runRScript(rCode);
+            const { stdout } = await runRScript(rCode, this.rscriptPath);
+
             this.tutorials = [];
             const lines = stdout.trim().split('\n');
             for (const line of lines) {
@@ -120,33 +133,73 @@ for (i in seq_len(nrow(tutorials))) {
                 }
             }
             this.tutorials.sort((a, b) => {
-                const labelA = `${a.packageName} - ${a.tutorialId}`;
-                const labelB = `${b.packageName} - ${b.tutorialId}`;
-                return labelA.localeCompare(labelB);
+                if (a.packageName !== b.packageName) {
+                    return a.packageName.localeCompare(b.packageName);
+                }
+                return a.tutorialId.localeCompare(b.tutorialId);
             });
+
+            // Build grouped map
+            this.packageMap = new Map();
+            for (const t of this.tutorials) {
+                let arr = this.packageMap.get(t.packageName);
+                if (!arr) {
+                    arr = [];
+                    this.packageMap.set(t.packageName, arr);
+                }
+                arr.push(t);
+            }
+
         } catch (err: any) {
-            vscode.window.showErrorMessage(`Failed to load tutorials: ${err.message}`);
+            const rStderr = err?.stderr ? `\nR output: ${err.stderr.trim()}` : '';
+            vscode.window.showErrorMessage(
+                `Failed to load tutorials: ${err.message}${rStderr}`
+            );
             this.tutorials = [];
+            this.packageMap = new Map();
+        }
+
+        if (this.treeView) {
+            this.treeView.message = undefined;
         }
         this._onDidChangeTreeData.fire();
     }
 
-    refresh(): void {
+    // -----------------------------------------------------------------------
+    // Public API
+    // -----------------------------------------------------------------------
+
+    refresh(rscriptPath?: string): void {
+        if (rscriptPath) {
+            this.rscriptPath = rscriptPath;
+        }
         this.loadTutorials();
     }
 
-    getTreeItem(element: TutorialItem): vscode.TreeItem {
+    getTreeItem(element: TreeNode): vscode.TreeItem {
         return element;
     }
 
-    getChildren(): TutorialItem[] {
-        return this.tutorials.map(t =>
-            new TutorialItem(
-                `${t.packageName} - ${t.tutorialId}`,
-                t.packageName,
-                t.tutorialId,
-                vscode.TreeItemCollapsibleState.None
-            )
-        );
+    getChildren(element?: TreeNode): TreeNode[] {
+        if (!element) {
+            const packages = Array.from(this.packageMap.keys()).sort();
+            return packages.map(pkg =>
+                new PackageItem(pkg, this.packageMap.get(pkg)!.length)
+            );
+        }
+
+        if (element instanceof PackageItem) {
+            const entries = this.packageMap.get(element.packageName) || [];
+            return entries.map(t =>
+                new TutorialItem(
+                    t.tutorialId,
+                    t.packageName,
+                    t.tutorialId,
+                    vscode.TreeItemCollapsibleState.None
+                )
+            );
+        }
+
+        return [];
     }
 }

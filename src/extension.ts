@@ -1,25 +1,12 @@
 import * as vscode from 'vscode';
-import { TutorialProvider } from './tutorialProvider';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import { TutorialProvider, TutorialItem } from './tutorialProvider';
+import { runRScript, isValidName, resolveRscriptPath } from './utils';
 
-const execAsync = promisify(exec);
-
-async function runRScript(code: string): Promise<string> {
-    const tmpFile = path.join(os.tmpdir(), `r-tutorials-${Date.now()}.R`);
-    fs.writeFileSync(tmpFile, code, 'utf8');
-    try {
-        const { stdout } = await execAsync(`Rscript "${tmpFile}"`);
-        return stdout;
-    } finally {
-        try { fs.unlinkSync(tmpFile); } catch {}
-    }
-}
-
-async function getMissingDeps(packageName: string, tutorialId: string): Promise<string[]> {
+async function getMissingDeps(
+    packageName: string,
+    tutorialId: string,
+    rscriptPath: string
+): Promise<string[]> {
     const rCode =
 `tutorials <- learnr::available_tutorials(package = "${packageName}")
 row <- tutorials[tutorials$name == "${tutorialId}", ]
@@ -30,7 +17,7 @@ missing <- deps[!sapply(deps, requireNamespace, quietly = TRUE)]
 cat(paste(missing, collapse = "\\n"))
 `;
     try {
-        const stdout = await runRScript(rCode);
+        const { stdout } = await runRScript(rCode, rscriptPath);
         const trimmed = stdout.trim();
         if (trimmed.length === 0) {
             return [];
@@ -41,25 +28,85 @@ cat(paste(missing, collapse = "\\n"))
     }
 }
 
+/**
+ * Quote an Rscript path for use in terminal.sendText().
+ * On Windows, paths with spaces need quoting. On Unix, a bare "Rscript"
+ * works fine but quoting it is harmless.
+ */
+function shellQuote(p: string): string {
+    if (p.includes(' ') || p.includes('\\')) {
+        return `"${p}"`;
+    }
+    return p;
+}
+
 export function activate(context: vscode.ExtensionContext) {
 
     const tutorialProvider = new TutorialProvider();
 
     const treeView = vscode.window.createTreeView('rTutorialsList', {
         treeDataProvider: tutorialProvider,
-        showCollapseAll: false
+        showCollapseAll: true
     });
 
-    tutorialProvider.initialize();
+    tutorialProvider.setTreeView(treeView);
+
+    // Resolve R path, then initialize
+    let rscriptPath: string = 'Rscript';  // fallback
+
+    resolveRscriptPath().then(resolved => {
+        if (!resolved) {
+            vscode.window.showErrorMessage(
+                'R is not installed or not found. ' +
+                'Install R from https://cran.r-project.org or set the ' +
+                '"rTutorials.rscriptPath" setting to the path of your Rscript executable.',
+                'Download R',
+                'Open Settings'
+            ).then(selection => {
+                if (selection === 'Download R') {
+                    vscode.env.openExternal(vscode.Uri.parse('https://cran.r-project.org/'));
+                } else if (selection === 'Open Settings') {
+                    vscode.commands.executeCommand(
+                        'workbench.action.openSettings', 'rTutorials.rscriptPath'
+                    );
+                }
+            });
+            return;
+        }
+        rscriptPath = resolved;
+        tutorialProvider.initialize(rscriptPath);
+    });
+
+    // Re-resolve if the user changes the setting
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('rTutorials.rscriptPath')) {
+                resolveRscriptPath().then(resolved => {
+                    if (resolved) {
+                        rscriptPath = resolved;
+                        tutorialProvider.refresh(rscriptPath);
+                    }
+                });
+            }
+        })
+    );
 
     const runTutorial = vscode.commands.registerCommand(
         'rTutorials.runTutorial',
-        async (item: any) => {
+        async (item: TutorialItem) => {
             if (!item || !item.packageName) { return; }
             const packageName: string = item.packageName;
             const tutorialId: string = item.tutorialId;
 
-            const missing = await getMissingDeps(packageName, tutorialId);
+            if (!isValidName(packageName) || !isValidName(tutorialId)) {
+                vscode.window.showErrorMessage(
+                    `Invalid package or tutorial name: "${packageName}" / "${tutorialId}"`
+                );
+                return;
+            }
+
+            const quoted = shellQuote(rscriptPath);
+            const missing = await getMissingDeps(packageName, tutorialId, rscriptPath);
 
             if (missing.length > 0) {
                 const selection = await vscode.window.showWarningMessage(
@@ -70,25 +117,26 @@ export function activate(context: vscode.ExtensionContext) {
                 if (selection !== 'Install and Run') {
                     return;
                 }
-				const terminal = vscode.window.createTerminal('R Tutorial');
+                const terminal = vscode.window.createTerminal('R Tutorial');
                 terminal.show();
                 const installCmd = missing.map(p => `'${p}'`).join(', ');
                 terminal.sendText(
-                    `Rscript -e "install.packages(c(${installCmd}), repos = 'https://cloud.r-project.org'); learnr::run_tutorial('${tutorialId}', package = '${packageName}')"`
+                    `${quoted} -e "install.packages(c(${installCmd}), repos = 'https://cloud.r-project.org'); learnr::run_tutorial('${tutorialId}', package = '${packageName}')"`
                 );
+                return;
             }
 
             const terminal = vscode.window.createTerminal('R Tutorial');
             terminal.show();
             terminal.sendText(
-                `Rscript -e "learnr::run_tutorial('${tutorialId}', package = '${packageName}')"`
+                `${quoted} -e "learnr::run_tutorial('${tutorialId}', package = '${packageName}')"`
             );
         }
     );
 
     const refreshTutorials = vscode.commands.registerCommand(
         'rTutorials.refresh',
-        () => tutorialProvider.refresh()
+        () => tutorialProvider.refresh(rscriptPath)
     );
 
     context.subscriptions.push(treeView, runTutorial, refreshTutorials);

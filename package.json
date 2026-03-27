@@ -2,7 +2,7 @@
   "name": "vscode-r-tutorials",
   "displayName": "R Tutorials",
   "description": "Browse and run R package tutorials (learnr)",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "publisher": "PPBDS",
   "repository": {
     "type": "git",
@@ -14,11 +14,18 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onView:rTutorialsList"
-  ],
   "main": "./out/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "R Tutorials",
+      "properties": {
+        "rTutorials.rscriptPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the `Rscript` executable. Leave blank to auto-detect from PATH (macOS/Linux) or the Windows Registry. Examples: `/usr/local/bin/Rscript`, `C:\\Program Files\\R\\R-4.4.0\\bin\\x64\\Rscript.exe`."
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -59,7 +66,7 @@
       "view/item/context": [
         {
           "command": "rTutorials.runTutorial",
-          "when": "view == rTutorialsList",
+          "when": "view == rTutorialsList && viewItem == tutorial",
           "group": "inline"
         }
       ]

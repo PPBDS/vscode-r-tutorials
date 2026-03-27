@@ -3,7 +3,6 @@ import * as vscode from 'vscode';
 
 suite('R Tutorials Extension', () => {
 
-    // Give tests more time since some trigger R processes
     const TIMEOUT = 30000;
 
     // ------------------------------------------------------------------
@@ -17,10 +16,7 @@ suite('R Tutorials Extension', () => {
     test('Commands should be registered after activation', async function () {
         this.timeout(TIMEOUT);
 
-        // Activate the extension by triggering its view
         await vscode.commands.executeCommand('rTutorialsList.focus');
-
-        // Give it a moment to finish activating
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         const commands = await vscode.commands.getCommands(true);
@@ -35,23 +31,24 @@ suite('R Tutorials Extension', () => {
     });
 
     // ------------------------------------------------------------------
-    // TutorialItem unit-style tests
+    // TutorialItem
     // ------------------------------------------------------------------
 
     test('TutorialItem should have correct properties', () => {
         const { TutorialItem } = require('../tutorialProvider');
 
         const item = new TutorialItem(
-            'mypackage - mytutorial',
+            'mytutorial',
             'mypackage',
             'mytutorial',
             vscode.TreeItemCollapsibleState.None
         );
 
-        assert.strictEqual(item.label, 'mypackage - mytutorial');
+        assert.strictEqual(item.label, 'mytutorial');
         assert.strictEqual(item.packageName, 'mypackage');
         assert.strictEqual(item.tutorialId, 'mytutorial');
-        assert.strictEqual(item.tooltip, 'mypackage - mytutorial');
+        assert.strictEqual(item.tooltip, 'mypackage — mytutorial');
+        assert.strictEqual(item.contextValue, 'tutorial');
         assert.strictEqual(
             item.collapsibleState,
             vscode.TreeItemCollapsibleState.None
@@ -62,30 +59,79 @@ suite('R Tutorials Extension', () => {
         const { TutorialItem } = require('../tutorialProvider');
 
         const item = new TutorialItem(
-            'pkg - tut',
-            'pkg',
-            'tut',
+            'tut', 'pkg', 'tut',
             vscode.TreeItemCollapsibleState.None
         );
 
-        assert.strictEqual(item.command, undefined, 'Item should not trigger on single click');
+        assert.strictEqual(item.command, undefined);
     });
 
     test('TutorialItem should have a play icon', () => {
         const { TutorialItem } = require('../tutorialProvider');
 
         const item = new TutorialItem(
-            'pkg - tut',
-            'pkg',
-            'tut',
+            'tut', 'pkg', 'tut',
             vscode.TreeItemCollapsibleState.None
         );
 
-        assert.ok(item.iconPath, 'Item should have an icon');
+        assert.ok(item.iconPath);
+        assert.strictEqual((item.iconPath as vscode.ThemeIcon).id, 'play');
+    });
+
+    // ------------------------------------------------------------------
+    // PackageItem
+    // ------------------------------------------------------------------
+
+    test('PackageItem should have correct properties', () => {
+        const { PackageItem } = require('../tutorialProvider');
+
+        const item = new PackageItem('mypackage', 3);
+
+        assert.strictEqual(item.packageName, 'mypackage');
+        assert.strictEqual(item.label, 'mypackage');
+        assert.strictEqual(item.description, '3 tutorials');
+        assert.strictEqual(item.contextValue, 'package');
         assert.strictEqual(
-            (item.iconPath as vscode.ThemeIcon).id,
-            'play'
+            item.collapsibleState,
+            vscode.TreeItemCollapsibleState.Collapsed
         );
+    });
+
+    test('PackageItem should use singular for 1 tutorial', () => {
+        const { PackageItem } = require('../tutorialProvider');
+
+        const item = new PackageItem('mypkg', 1);
+        assert.strictEqual(item.description, '1 tutorial');
+    });
+
+    test('PackageItem should have a package icon', () => {
+        const { PackageItem } = require('../tutorialProvider');
+
+        const item = new PackageItem('pkg', 2);
+        assert.ok(item.iconPath);
+        assert.strictEqual((item.iconPath as vscode.ThemeIcon).id, 'package');
+    });
+
+    // ------------------------------------------------------------------
+    // Utils — isValidName
+    // ------------------------------------------------------------------
+
+    test('isValidName should accept standard R names', () => {
+        const { isValidName } = require('../utils');
+
+        assert.strictEqual(isValidName('ggplot2'), true);
+        assert.strictEqual(isValidName('primer.tutorials'), true);
+        assert.strictEqual(isValidName('r4ds-1'), true);
+        assert.strictEqual(isValidName('getting_started'), true);
+    });
+
+    test('isValidName should reject dangerous characters', () => {
+        const { isValidName } = require('../utils');
+
+        assert.strictEqual(isValidName("'; rm -rf /"), false);
+        assert.strictEqual(isValidName('foo`bar'), false);
+        assert.strictEqual(isValidName('pkg && echo hi'), false);
+        assert.strictEqual(isValidName(''), false);
     });
 
     // ------------------------------------------------------------------
@@ -97,8 +143,8 @@ suite('R Tutorials Extension', () => {
         const provider = new TutorialProvider();
 
         const children = provider.getChildren();
-        assert.ok(Array.isArray(children), 'getChildren should return an array');
-        assert.strictEqual(children.length, 0, 'Should be empty before init');
+        assert.ok(Array.isArray(children));
+        assert.strictEqual(children.length, 0);
     });
 
     test('TutorialProvider getTreeItem should return the same element', () => {
@@ -106,24 +152,18 @@ suite('R Tutorials Extension', () => {
         const provider = new TutorialProvider();
 
         const item = new TutorialItem(
-            'pkg - tut',
-            'pkg',
-            'tut',
+            'tut', 'pkg', 'tut',
             vscode.TreeItemCollapsibleState.None
         );
 
-        const result = provider.getTreeItem(item);
-        assert.strictEqual(result, item, 'getTreeItem should return the input element');
+        assert.strictEqual(provider.getTreeItem(item), item);
     });
 
     test('TutorialProvider should have a refresh method', () => {
         const { TutorialProvider } = require('../tutorialProvider');
         const provider = new TutorialProvider();
 
-        assert.ok(
-            typeof provider.refresh === 'function',
-            'Provider should have a refresh method'
-        );
+        assert.ok(typeof provider.refresh === 'function');
     });
 
     test('TutorialProvider should fire onDidChangeTreeData event', async function () {
@@ -137,10 +177,20 @@ suite('R Tutorials Extension', () => {
                 resolve(true);
             });
             provider.refresh();
-            // Fallback timeout in case R is not installed
             setTimeout(() => resolve(false), 25000);
         });
 
         assert.ok(fired, 'onDidChangeTreeData should have fired');
+    });
+
+    // ------------------------------------------------------------------
+    // Configuration
+    // ------------------------------------------------------------------
+
+    test('rTutorials.rscriptPath setting should exist', () => {
+        const config = vscode.workspace.getConfiguration('rTutorials');
+        const value = config.get<string>('rscriptPath');
+        // Default is empty string
+        assert.strictEqual(typeof value, 'string');
     });
 });
