@@ -30,7 +30,7 @@ jobs:
           use-public-rspm: true
 
       - name: Install learnr
-        run: Rscript -e "install.packages('learnr', repos = 'https://cloud.r-project.org')"
+        run: Rscript -e "install.packages('learnr')"
 
       - name: Install Node dependencies
         run: npm ci
