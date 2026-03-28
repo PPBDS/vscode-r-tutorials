@@ -2,12 +2,13 @@
   "name": "vscode-r-tutorials",
   "displayName": "R Tutorials",
   "description": "Browse and run R package tutorials (learnr)",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "publisher": "PPBDS",
   "repository": {
     "type": "git",
     "url": "https://github.com/PPBDS/vscode-r-tutorials"
   },
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.100.0"
   },
