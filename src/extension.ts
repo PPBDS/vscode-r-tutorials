@@ -1,6 +1,12 @@
 import * as vscode from 'vscode';
 import { TutorialProvider, TutorialItem } from './tutorialProvider';
-import { runRScript, isValidName, resolveRscriptPath } from './utils';
+import {
+    runRScript,
+    isValidName,
+    resolveRscriptPath,
+    buildRunCommand,
+    buildInstallAndRunCommand
+} from './utils';
 
 async function getMissingDeps(
     packageName: string,
@@ -26,18 +32,6 @@ cat(paste(missing, collapse = "\\n"))
     } catch {
         return [];
     }
-}
-
-/**
- * Quote an Rscript path for use in terminal.sendText().
- * On Windows, paths with spaces need quoting. On Unix, a bare "Rscript"
- * works fine but quoting it is harmless.
- */
-function shellQuote(p: string): string {
-    if (p.includes(' ') || p.includes('\\')) {
-        return `"${p}"`;
-    }
-    return p;
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -105,7 +99,6 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const quoted = shellQuote(rscriptPath);
             const missing = await getMissingDeps(packageName, tutorialId, rscriptPath);
 
             if (missing.length > 0) {
@@ -119,18 +112,15 @@ export function activate(context: vscode.ExtensionContext) {
                 }
                 const terminal = vscode.window.createTerminal('R Tutorial');
                 terminal.show();
-                const installCmd = missing.map(p => `'${p}'`).join(', ');
                 terminal.sendText(
-                    `${quoted} -e "install.packages(c(${installCmd}), repos = 'https://cloud.r-project.org'); learnr::run_tutorial('${tutorialId}', package = '${packageName}')"`
+                    buildInstallAndRunCommand(rscriptPath, tutorialId, packageName, missing)
                 );
                 return;
             }
 
             const terminal = vscode.window.createTerminal('R Tutorial');
             terminal.show();
-            terminal.sendText(
-                `${quoted} -e "learnr::run_tutorial('${tutorialId}', package = '${packageName}')"`
-            );
+            terminal.sendText(buildRunCommand(rscriptPath, tutorialId, packageName));
         }
     );
 
