@@ -251,7 +251,7 @@ suite('R Tutorials Extension', () => {
         assert.strictEqual(item.command, undefined);
     });
 
-    test('TutorialItem should have a play icon', () => {
+    test('TutorialItem should use a dot icon, not a second play triangle', () => {
         const { TutorialItem } = require('../tutorialProvider');
 
         const item = new TutorialItem(
@@ -260,7 +260,7 @@ suite('R Tutorials Extension', () => {
         );
 
         assert.ok(item.iconPath);
-        assert.strictEqual((item.iconPath as vscode.ThemeIcon).id, 'play');
+        assert.strictEqual((item.iconPath as vscode.ThemeIcon).id, 'circle-small-filled');
     });
 
     // ------------------------------------------------------------------

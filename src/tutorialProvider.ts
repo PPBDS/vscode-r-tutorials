@@ -30,7 +30,10 @@ export class TutorialItem extends vscode.TreeItem {
         super(label, collapsibleState);
         this.tooltip = `${packageName} — ${tutorialId}`;
         this.description = '';
-        this.iconPath = new vscode.ThemeIcon('play');
+        // A small dot marks each tutorial. The run action is the inline play
+        // button on the right; a left-hand play icon here would be a confusing
+        // second triangle that does nothing when clicked.
+        this.iconPath = new vscode.ThemeIcon('circle-small-filled');
     }
 }
 
@@ -107,9 +110,21 @@ export class TutorialProvider implements vscode.TreeDataProvider<TreeNode> {
     // Loading tutorials
     // -----------------------------------------------------------------------
 
+    /**
+     * Shown in the view's message area while tutorials load. The panel is
+     * narrow, so each instruction is split across two short lines to avoid
+     * awkward mid-word wrapping.
+     */
+    private static readonly LOADING_MESSAGE =
+        'Loading packages…\n\n' +
+        'To find a tutorial,\n' +
+        'select its package.\n\n' +
+        'To run a tutorial, select it,\n' +
+        'then click the arrow on the right.';
+
     private async loadTutorials(): Promise<void> {
         if (this.treeView) {
-            this.treeView.message = 'Loading tutorials…';
+            this.treeView.message = TutorialProvider.LOADING_MESSAGE;
         }
 
         try {
