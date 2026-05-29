@@ -7,6 +7,10 @@ import * as os from 'os';
 
 const execAsync = promisify(exec);
 
+// Monotonic counter to guarantee unique temp-file names even if two calls
+// land in the same millisecond.
+let tmpFileCounter = 0;
+
 // ---------------------------------------------------------------------------
 // R script execution
 // ---------------------------------------------------------------------------
@@ -21,7 +25,10 @@ interface RScriptResult {
  * Returns both stdout and stderr so callers can surface R-level diagnostics.
  */
 export async function runRScript(code: string, rscriptPath: string): Promise<RScriptResult> {
-    const tmpFile = path.join(os.tmpdir(), `r-tutorials-${Date.now()}.R`);
+    const tmpFile = path.join(
+        os.tmpdir(),
+        `r-tutorials-${process.pid}-${Date.now()}-${tmpFileCounter++}.R`
+    );
     fs.writeFileSync(tmpFile, code, 'utf8');
     try {
         const { stdout, stderr } = await execAsync(`"${rscriptPath}" "${tmpFile}"`);

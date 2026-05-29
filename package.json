@@ -8,12 +8,25 @@
     "type": "git",
     "url": "https://github.com/PPBDS/vscode-r-tutorials"
   },
+  "bugs": {
+    "url": "https://github.com/PPBDS/vscode-r-tutorials/issues"
+  },
+  "homepage": "https://github.com/PPBDS/vscode-r-tutorials#readme",
+  "license": "MIT",
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.100.0"
   },
   "categories": [
+    "Education",
     "Other"
+  ],
+  "keywords": [
+    "R",
+    "learnr",
+    "tutorial",
+    "rstats",
+    "data science"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -82,7 +95,9 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "package": "vsce package",
+    "publish": "vsce publish"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -92,6 +107,7 @@
     "@typescript-eslint/parser": "^8.17.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.25.0",
     "eslint": "^9.16.0",
     "typescript": "^5.7.2",
