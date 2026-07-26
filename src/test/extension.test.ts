@@ -295,6 +295,135 @@ suite('R Tutorials Extension', () => {
     });
 
     // ------------------------------------------------------------------
+    // parseTutorialLines (tutorial titles)
+    // ------------------------------------------------------------------
+
+    test('parseTutorialLines should parse package, id, and title', () => {
+        const { parseTutorialLines } = require('../tutorialProvider');
+
+        const entries = parseTutorialLines(
+            'learnr\tex-data-basics\tData basics\n' +
+            'learnr\thello\tHello, Tutorial!\n'
+        );
+
+        assert.strictEqual(entries.length, 2);
+        assert.deepStrictEqual(entries[0], {
+            packageName: 'learnr',
+            tutorialId: 'ex-data-basics',
+            title: 'Data basics'
+        });
+        assert.deepStrictEqual(entries[1], {
+            packageName: 'learnr',
+            tutorialId: 'hello',
+            title: 'Hello, Tutorial!'
+        });
+    });
+
+    test('parseTutorialLines should default title to empty when absent', () => {
+        const { parseTutorialLines } = require('../tutorialProvider');
+
+        // Two-field line (older format / tutorial without a YAML title)
+        const entries = parseTutorialLines('pkg\tmy-tutorial\n');
+
+        assert.strictEqual(entries.length, 1);
+        assert.strictEqual(entries[0].title, '');
+        assert.strictEqual(entries[0].tutorialId, 'my-tutorial');
+    });
+
+    test('parseTutorialLines should skip malformed lines', () => {
+        const { parseTutorialLines } = require('../tutorialProvider');
+
+        const entries = parseTutorialLines(
+            'no-tabs-here\n' +
+            'pkg\tgood-one\tA Title\n' +
+            '\n'
+        );
+
+        assert.strictEqual(entries.length, 1);
+        assert.strictEqual(entries[0].tutorialId, 'good-one');
+    });
+
+    test('parseTutorialLines should sort by directory name, not title', () => {
+        const { parseTutorialLines } = require('../tutorialProvider');
+
+        // Titles in reverse alphabetical order relative to their ids —
+        // the id (directory name) order must win.
+        const entries = parseTutorialLines(
+            'pkg\t02-data\tAI Introduction\n' +
+            'pkg\t01-intro\tZebra Patterns\n' +
+            'apkg\tzzz\tLast Alphabetically\n'
+        );
+
+        assert.strictEqual(entries[0].packageName, 'apkg');
+        assert.strictEqual(entries[1].tutorialId, '01-intro');
+        assert.strictEqual(entries[2].tutorialId, '02-data');
+    });
+
+    test('parseTutorialLines should sort ids with numeric awareness', () => {
+        const { parseTutorialLines } = require('../tutorialProvider');
+
+        const entries = parseTutorialLines(
+            'pkg\ttutorial-10\tB\n' +
+            'pkg\ttutorial-2\tA\n'
+        );
+
+        // tutorial-2 before tutorial-10 (numeric, not lexicographic)
+        assert.strictEqual(entries[0].tutorialId, 'tutorial-2');
+        assert.strictEqual(entries[1].tutorialId, 'tutorial-10');
+    });
+
+    test('getChildren should use the title as label and keep the id for running', () => {
+        const { TutorialProvider, PackageItem, parseTutorialLines } =
+            require('../tutorialProvider');
+
+        const provider = new TutorialProvider();
+        const entries = parseTutorialLines('learnr\tex-data-basics\tData basics\n');
+        provider['packageMap'] = new Map([['learnr', entries]]);
+
+        const children = provider.getChildren(new PackageItem('learnr', 1));
+
+        assert.strictEqual(children.length, 1);
+        assert.strictEqual(children[0].label, 'Data basics');
+        assert.strictEqual(children[0].tutorialId, 'ex-data-basics');
+        assert.strictEqual(children[0].packageName, 'learnr');
+    });
+
+    test('getChildren should show directory names when titles collide', () => {
+        const { TutorialProvider, PackageItem, parseTutorialLines } =
+            require('../tutorialProvider');
+
+        const provider = new TutorialProvider();
+        const entries = parseTutorialLines(
+            'pkg\t01-intro\tIntroduction\n' +
+            'pkg\t05-recap\tIntroduction\n' +
+            'pkg\t03-data\tData basics\n'
+        );
+        provider['packageMap'] = new Map([['pkg', entries]]);
+
+        const children = provider.getChildren(new PackageItem('pkg', 3));
+        const labels = children.map((c: any) => c.label);
+
+        // Both "Introduction" duplicates fall back to their unique directory
+        // names; the unambiguous title is untouched.
+        assert.deepStrictEqual(labels, ['01-intro', 'Data basics', '05-recap']);
+    });
+
+    test('getChildren should fall back to the id when title is empty', () => {
+        const { TutorialProvider, PackageItem, parseTutorialLines } =
+            require('../tutorialProvider');
+
+        const provider = new TutorialProvider();
+        const entries = parseTutorialLines('pkg\tuntitled-tut\n');
+        provider['packageMap'] = new Map([['pkg', entries]]);
+
+        const children = provider.getChildren(new PackageItem('pkg', 1));
+
+        assert.strictEqual(children.length, 1);
+        assert.strictEqual(children[0].label, 'untitled-tut');
+        assert.strictEqual(children[0].tutorialId, 'untitled-tut');
+    });
+
+    // ------------------------------------------------------------------
     // TutorialProvider tree data
     // ------------------------------------------------------------------
 

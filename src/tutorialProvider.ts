@@ -43,9 +43,41 @@ type TreeNode = PackageItem | TutorialItem;
 // Internal data
 // ---------------------------------------------------------------------------
 
-interface TutorialEntry {
+export interface TutorialEntry {
     packageName: string;
     tutorialId: string;
+    /** Human-readable title from the tutorial's YAML header; may be empty. */
+    title: string;
+}
+
+/**
+ * Parse the tab-separated output of the R listing script into sorted
+ * tutorial entries. Each line is "package\tname\ttitle"; the title field
+ * may be absent or empty for tutorials without a YAML title.
+ * Pure function — easy to test.
+ */
+export function parseTutorialLines(stdout: string): TutorialEntry[] {
+    const entries: TutorialEntry[] = [];
+    for (const line of stdout.trim().split('\n')) {
+        const parts = line.split('\t');
+        if (parts.length >= 2) {
+            entries.push({
+                packageName: parts[0].trim(),
+                tutorialId: parts[1].trim(),
+                title: (parts[2] ?? '').trim()
+            });
+        }
+    }
+    // Sort by the tutorial's directory name (the id), not its display title:
+    // package authors order their tutorials by naming the directories
+    // (01-intro, 02-data, …), and that intended sequence should win.
+    entries.sort((a, b) => {
+        if (a.packageName !== b.packageName) {
+            return a.packageName.localeCompare(b.packageName);
+        }
+        return a.tutorialId.localeCompare(b.tutorialId, undefined, { numeric: true });
+    });
+    return entries;
 }
 
 // ---------------------------------------------------------------------------
@@ -128,31 +160,20 @@ export class TutorialProvider implements vscode.TreeDataProvider<TreeNode> {
         }
 
         try {
+            // Titles are free text, so strip the characters used as record
+            // separators (tabs and newlines) before printing.
             const rCode =
 `tutorials <- learnr::available_tutorials()
 for (i in seq_len(nrow(tutorials))) {
-  cat(tutorials$package[i], "\\t", tutorials$name[i], "\\n", sep = "")
+  title <- tutorials$title[i]
+  if (is.na(title)) title <- ""
+  title <- gsub("[\\t\\r\\n]+", " ", title)
+  cat(tutorials$package[i], "\\t", tutorials$name[i], "\\t", title, "\\n", sep = "")
 }
 `;
             const { stdout } = await runRScript(rCode, this.rscriptPath);
 
-            this.tutorials = [];
-            const lines = stdout.trim().split('\n');
-            for (const line of lines) {
-                const parts = line.split('\t');
-                if (parts.length === 2) {
-                    this.tutorials.push({
-                        packageName: parts[0].trim(),
-                        tutorialId: parts[1].trim()
-                    });
-                }
-            }
-            this.tutorials.sort((a, b) => {
-                if (a.packageName !== b.packageName) {
-                    return a.packageName.localeCompare(b.packageName);
-                }
-                return a.tutorialId.localeCompare(b.tutorialId);
-            });
+            this.tutorials = parseTutorialLines(stdout);
 
             // Build grouped map
             this.packageMap = new Map();
@@ -205,9 +226,19 @@ for (i in seq_len(nrow(tutorials))) {
 
         if (element instanceof PackageItem) {
             const entries = this.packageMap.get(element.packageName) || [];
+            // A title shared by several tutorials is ambiguous — show the
+            // directory name (unique within a package) for all of them.
+            const titleCounts = new Map<string, number>();
+            for (const t of entries) {
+                if (t.title) {
+                    titleCounts.set(t.title, (titleCounts.get(t.title) ?? 0) + 1);
+                }
+            }
             return entries.map(t =>
                 new TutorialItem(
-                    t.tutorialId,
+                    t.title && titleCounts.get(t.title) === 1
+                        ? t.title
+                        : t.tutorialId,
                     t.packageName,
                     t.tutorialId,
                     vscode.TreeItemCollapsibleState.None
