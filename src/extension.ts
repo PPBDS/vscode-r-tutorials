@@ -5,7 +5,8 @@ import {
     isValidName,
     resolveRscriptPath,
     buildRunCommand,
-    buildInstallAndRunCommand
+    buildInstallAndRunCommand,
+    closeWelcomeTabs
 } from './utils';
 
 async function getMissingDeps(
@@ -39,6 +40,18 @@ cat(paste(missing, collapse = "\\n"))
 }
 
 export function activate(context: vscode.ExtensionContext) {
+
+    // Optionally close VS Code's Welcome tab so the editor area starts empty.
+    // We activate on onStartupFinished, by which time the Welcome page is
+    // normally open; the second, delayed attempt covers a slow window where
+    // it appears a moment later. Off unless the setting says otherwise.
+    if (vscode.workspace.getConfiguration('rTutorials').get<boolean>('closeWelcomeOnStartup', false)) {
+        void closeWelcomeTabs().then(closed => {
+            if (closed === 0) {
+                setTimeout(() => { void closeWelcomeTabs(); }, 2000);
+            }
+        });
+    }
 
     const tutorialProvider = new TutorialProvider();
 

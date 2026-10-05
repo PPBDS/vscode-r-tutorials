@@ -230,3 +230,45 @@ function getRscriptFromWindowsRegistry(): string | undefined {
 
     return undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Welcome tab (rTutorials.closeWelcomeOnStartup)
+// ---------------------------------------------------------------------------
+
+/**
+ * The minimal shape of a tab we need, so the finder can be unit-tested with
+ * plain objects instead of real vscode.Tab instances.
+ */
+export interface TabLike {
+    label: string;
+    input: unknown;
+}
+
+/**
+ * Pick out VS Code's Welcome ("Get Started") tabs from a list of tabs. The
+ * Welcome page is not a text, notebook, webview or custom editor, so its
+ * `input` is undefined — that, plus the label, identifies it without ever
+ * matching a file that happens to be called "Welcome" (a file tab has a
+ * TabInputText input). Pure function: easy to test.
+ */
+export function findWelcomeTabs<T extends TabLike>(tabs: readonly T[]): T[] {
+    return tabs.filter(t => t.input === undefined && t.label === 'Welcome');
+}
+
+/**
+ * Close VS Code's Welcome tab(s), if any are open. Returns how many were
+ * closed. Used at startup when `rTutorials.closeWelcomeOnStartup` is on —
+ * managed environments (the PPBDS Codespace) cannot set
+ * `workbench.startupEditor` from a devcontainer because it is
+ * application-scoped, so the extension does the closing instead.
+ */
+export async function closeWelcomeTabs(
+    tabGroups: typeof vscode.window.tabGroups = vscode.window.tabGroups
+): Promise<number> {
+    const tabs = findWelcomeTabs(tabGroups.all.flatMap(g => g.tabs));
+    if (tabs.length === 0) {
+        return 0;
+    }
+    await tabGroups.close(tabs, true);
+    return tabs.length;
+}

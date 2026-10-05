@@ -31,6 +31,57 @@ suite('R Tutorials Extension', () => {
     });
 
     // ------------------------------------------------------------------
+    // findWelcomeTabs (rTutorials.closeWelcomeOnStartup)
+    // ------------------------------------------------------------------
+
+    test('findWelcomeTabs picks the Welcome page and nothing else', () => {
+        const { findWelcomeTabs } = require('../utils');
+        const tabs = [
+            { label: 'Welcome', input: undefined },                 // the Welcome page
+            { label: 'Welcome', input: { uri: 'file:///Welcome' } }, // a FILE called Welcome
+            { label: 'analysis.qmd', input: { uri: 'file:///a' } },
+            { label: 'Settings', input: undefined }                  // another built-in page
+        ];
+        const found = findWelcomeTabs(tabs);
+        assert.strictEqual(found.length, 1);
+        assert.strictEqual(found[0], tabs[0]);
+    });
+
+    test('findWelcomeTabs returns an empty list when nothing matches', () => {
+        const { findWelcomeTabs } = require('../utils');
+        assert.deepStrictEqual(findWelcomeTabs([]), []);
+        assert.deepStrictEqual(
+            findWelcomeTabs([{ label: 'a.R', input: { uri: 'file:///a.R' } }]),
+            []
+        );
+    });
+
+    test('closeWelcomeTabs closes only Welcome tabs via the tab-group API', async () => {
+        const { closeWelcomeTabs } = require('../utils');
+        const welcome = { label: 'Welcome', input: undefined };
+        const file = { label: 'a.R', input: { uri: 'file:///a.R' } };
+        const closed: unknown[] = [];
+        const fakeGroups = {
+            all: [{ tabs: [welcome, file] }],
+            close: async (tabs: unknown[]) => { closed.push(...tabs); return true; }
+        };
+        const n = await closeWelcomeTabs(fakeGroups);
+        assert.strictEqual(n, 1);
+        assert.deepStrictEqual(closed, [welcome]);
+    });
+
+    test('closeWelcomeTabs is a no-op with no Welcome tab', async () => {
+        const { closeWelcomeTabs } = require('../utils');
+        let calls = 0;
+        const fakeGroups = {
+            all: [{ tabs: [{ label: 'a.R', input: { uri: 'file:///a.R' } }] }],
+            close: async () => { calls++; return true; }
+        };
+        assert.strictEqual(await closeWelcomeTabs(fakeGroups), 0);
+        assert.strictEqual(calls, 0);
+    });
+
+    // ------------------------------------------------------------------
     // shellQuote
     // ------------------------------------------------------------------
 

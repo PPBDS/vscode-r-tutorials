@@ -48,6 +48,7 @@ in settings (see below).
 | Setting | Default | Description |
 |---|---|---|
 | `rTutorials.rscriptPath` | `""` (auto-detect) | Path to the `Rscript` executable. Leave blank to auto-detect. |
+| `rTutorials.closeWelcomeOnStartup` | `false` | Close VS Code's Welcome tab once the window has started, so the editor area starts empty. For managed setups (e.g. a devcontainer, where `workbench.startupEditor` cannot be set because it is application-scoped). |
 
 Examples:
 * macOS: `/usr/local/bin/Rscript`
