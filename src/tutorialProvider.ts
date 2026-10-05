@@ -135,12 +135,15 @@ export class TutorialProvider implements vscode.TreeDataProvider<TreeNode> {
         // depends on learnr itself.
         const learnr2Installed = await this.checkLearnr2();
         if (!learnr2Installed) {
+            // learnr2 is not on CRAN; it is installed from GitHub.
+            const installCommand = 'install.packages("pak"); pak::pak("PPBDS/learnr2")';
             vscode.window.showErrorMessage(
-                'The learnr2 package is not installed. Please install it with: install.packages("learnr2")',
+                'The learnr2 package is not installed. Please install it from GitHub ' +
+                'by running this in R: ' + installCommand,
                 'Copy Install Command'
             ).then(selection => {
                 if (selection === 'Copy Install Command') {
-                    vscode.env.clipboard.writeText('install.packages("learnr2")');
+                    vscode.env.clipboard.writeText(installCommand);
                     vscode.window.showInformationMessage('Command copied to clipboard.');
                 }
             });

@@ -19,8 +19,15 @@ Browse and run R package tutorials directly from the VS Code sidebar.
 
 * [R](https://cran.r-project.org/) installed
 * The [learnr2](https://ppbds.github.io/learnr2/) R package. It lists and
-  runs both kinds of tutorial. Packages that bundle classic learnr tutorials
-  already depend on learnr, so nothing else needs installing for those.
+  runs both kinds of tutorial. It is not on CRAN, so install it from GitHub:
+
+  ```r
+  install.packages("pak")
+  pak::pak("PPBDS/learnr2")
+  ```
+
+  Packages that bundle classic learnr tutorials already depend on learnr, so
+  nothing else needs installing for those.
 * The [Quarto](https://quarto.org/docs/get-started/) command line tool, for
   Quarto tutorials. Classic learnr tutorials do not need it.
 
