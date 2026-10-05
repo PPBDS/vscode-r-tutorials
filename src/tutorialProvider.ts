@@ -1,5 +1,17 @@
 import * as vscode from 'vscode';
-import { runRScript } from './utils';
+import { runRScript, isQuartoAvailable } from './utils';
+
+/**
+ * The two kinds of tutorial learnr2::available_tutorials() reports: a
+ * Quarto document whose exercises run in the browser via WebR, or a classic
+ * learnr R Markdown document that runs as a Shiny app.
+ */
+export type TutorialFormat = 'quarto' | 'rmarkdown';
+
+/** Short, student-facing name for a format, shown next to each tutorial. */
+export function formatLabel(format: TutorialFormat): string {
+    return format === 'quarto' ? 'Quarto' : 'learnr';
+}
 
 // ---------------------------------------------------------------------------
 // Tree items
@@ -25,11 +37,14 @@ export class TutorialItem extends vscode.TreeItem {
         public readonly label: string,
         public readonly packageName: string,
         public readonly tutorialId: string,
+        public readonly format: TutorialFormat,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState
     ) {
         super(label, collapsibleState);
-        this.tooltip = `${packageName} — ${tutorialId}`;
-        this.description = '';
+        this.tooltip = `${packageName} — ${tutorialId} (${formatLabel(format)} tutorial)`;
+        // Tell students what to expect: a Quarto tutorial opens as a page
+        // that runs in the browser; a learnr one starts a Shiny app.
+        this.description = formatLabel(format);
         // A small dot marks each tutorial. The run action is the inline play
         // button on the right; a left-hand play icon here would be a confusing
         // second triangle that does nothing when clicked.
@@ -48,12 +63,15 @@ export interface TutorialEntry {
     tutorialId: string;
     /** Human-readable title from the tutorial's YAML header; may be empty. */
     title: string;
+    format: TutorialFormat;
 }
 
 /**
  * Parse the tab-separated output of the R listing script into sorted
- * tutorial entries. Each line is "package\tname\ttitle"; the title field
- * may be absent or empty for tutorials without a YAML title.
+ * tutorial entries. Each line is "package\tname\ttitle\tformat"; the title
+ * field may be absent or empty for tutorials without a YAML title, and a
+ * missing or unrecognised format field is taken to be a classic learnr
+ * tutorial.
  * Pure function — easy to test.
  */
 export function parseTutorialLines(stdout: string): TutorialEntry[] {
@@ -64,7 +82,8 @@ export function parseTutorialLines(stdout: string): TutorialEntry[] {
             entries.push({
                 packageName: parts[0].trim(),
                 tutorialId: parts[1].trim(),
-                title: (parts[2] ?? '').trim()
+                title: (parts[2] ?? '').trim(),
+                format: (parts[3] ?? '').trim() === 'quarto' ? 'quarto' : 'rmarkdown'
             });
         }
     }
@@ -95,6 +114,8 @@ export class TutorialProvider implements vscode.TreeDataProvider<TreeNode> {
     private packageMap: Map<string, TutorialEntry[]> = new Map();
     private rscriptPath: string = 'Rscript';
     private treeView: vscode.TreeView<TreeNode> | undefined;
+    /** The missing-Quarto warning is shown at most once per session. */
+    private quartoWarned = false;
 
     /** Call after creating the tree view so the provider can show loading messages. */
     setTreeView(tv: vscode.TreeView<TreeNode>): void {
@@ -108,15 +129,18 @@ export class TutorialProvider implements vscode.TreeDataProvider<TreeNode> {
     async initialize(rscriptPath: string): Promise<void> {
         this.rscriptPath = rscriptPath;
 
-        // Check that learnr is installed
-        const learnrInstalled = await this.checkLearnr();
-        if (!learnrInstalled) {
+        // Check that learnr2 is installed. It is the only R package the
+        // extension needs: it lists and runs both Quarto and classic learnr
+        // tutorials, and any package that bundles learnr tutorials already
+        // depends on learnr itself.
+        const learnr2Installed = await this.checkLearnr2();
+        if (!learnr2Installed) {
             vscode.window.showErrorMessage(
-                'The learnr package is not installed. Please install it with: install.packages("learnr")',
+                'The learnr2 package is not installed. Please install it with: install.packages("learnr2")',
                 'Copy Install Command'
             ).then(selection => {
                 if (selection === 'Copy Install Command') {
-                    vscode.env.clipboard.writeText('install.packages("learnr")');
+                    vscode.env.clipboard.writeText('install.packages("learnr2")');
                     vscode.window.showInformationMessage('Command copied to clipboard.');
                 }
             });
@@ -126,10 +150,10 @@ export class TutorialProvider implements vscode.TreeDataProvider<TreeNode> {
         await this.loadTutorials();
     }
 
-    private async checkLearnr(): Promise<boolean> {
+    private async checkLearnr2(): Promise<boolean> {
         try {
             const { stdout } = await runRScript(
-                'cat(requireNamespace("learnr", quietly = TRUE))',
+                'cat(requireNamespace("learnr2", quietly = TRUE))',
                 this.rscriptPath
             );
             return stdout.trim() === 'TRUE';
@@ -160,20 +184,27 @@ export class TutorialProvider implements vscode.TreeDataProvider<TreeNode> {
         }
 
         try {
+            // learnr2 scans every installed package for inst/tutorials/ and
+            // reports both Quarto and classic learnr tutorials, with the
+            // format of each. A directory with no document at all (format
+            // NA) cannot be run, so it is left out.
             // Titles are free text, so strip the characters used as record
             // separators (tabs and newlines) before printing.
             const rCode =
-`tutorials <- learnr::available_tutorials()
+`tutorials <- learnr2::available_tutorials()
 for (i in seq_len(nrow(tutorials))) {
+  format <- tutorials$format[i]
+  if (is.na(format)) next
   title <- tutorials$title[i]
   if (is.na(title)) title <- ""
   title <- gsub("[\\t\\r\\n]+", " ", title)
-  cat(tutorials$package[i], "\\t", tutorials$name[i], "\\t", title, "\\n", sep = "")
+  cat(tutorials$package[i], "\\t", tutorials$name[i], "\\t", title, "\\t", format, "\\n", sep = "")
 }
 `;
             const { stdout } = await runRScript(rCode, this.rscriptPath);
 
             this.tutorials = parseTutorialLines(stdout);
+            this.warnIfQuartoMissing();
 
             // Build grouped map
             this.packageMap = new Map();
@@ -199,6 +230,30 @@ for (i in seq_len(nrow(tutorials))) {
             this.treeView.message = undefined;
         }
         this._onDidChangeTreeData.fire();
+    }
+
+    /**
+     * Quarto tutorials are rendered with the Quarto command line tool. If
+     * any are installed but Quarto is not, say so once; the tutorials stay
+     * listed so students can see what exists, and running one fails with
+     * learnr2's own message.
+     */
+    private async warnIfQuartoMissing(): Promise<void> {
+        if (this.quartoWarned || !this.tutorials.some(t => t.format === 'quarto')) {
+            return;
+        }
+        if (await isQuartoAvailable()) {
+            return;
+        }
+        this.quartoWarned = true;
+        const selection = await vscode.window.showWarningMessage(
+            'Some installed tutorials are Quarto tutorials, which need the Quarto ' +
+            'command line tool to run. Install it from https://quarto.org.',
+            'Download Quarto'
+        );
+        if (selection === 'Download Quarto') {
+            vscode.env.openExternal(vscode.Uri.parse('https://quarto.org/docs/get-started/'));
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -241,6 +296,7 @@ for (i in seq_len(nrow(tutorials))) {
                         : t.tutorialId,
                     t.packageName,
                     t.tutorialId,
+                    t.format,
                     vscode.TreeItemCollapsibleState.None
                 )
             );

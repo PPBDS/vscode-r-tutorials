@@ -5,6 +5,10 @@ Browse and run R package tutorials directly from the VS Code sidebar.
 ## Features
 
 * Activity Bar icon for quick access to all installed R tutorials
+* Shows both kinds of tutorial: [learnr2](https://ppbds.github.io/learnr2/)
+  Quarto tutorials, which run in the browser via WebR, and classic
+  [learnr](https://rstudio.github.io/learnr/) tutorials, which run as a
+  Shiny app. Each is labelled so students know what to expect.
 * Tutorials grouped by package for easy browsing
 * Click the play button to run any tutorial directly
 * Automatically detects missing dependencies and offers to install them
@@ -14,7 +18,11 @@ Browse and run R package tutorials directly from the VS Code sidebar.
 ## Requirements
 
 * [R](https://cran.r-project.org/) installed
-* The [learnr](https://rstudio.github.io/learnr/) R package
+* The [learnr2](https://ppbds.github.io/learnr2/) R package. It lists and
+  runs both kinds of tutorial. Packages that bundle classic learnr tutorials
+  already depend on learnr, so nothing else needs installing for those.
+* The [Quarto](https://quarto.org/docs/get-started/) command line tool, for
+  Quarto tutorials. Classic learnr tutorials do not need it.
 
 On macOS and Linux, R is usually found automatically via PATH. On Windows,
 the extension reads R's install location from the Windows Registry (set during

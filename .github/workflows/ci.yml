@@ -29,8 +29,11 @@ jobs:
           r-version: release
           use-public-rspm: true
 
-      - name: Install learnr
-        run: Rscript -e "install.packages('learnr')"
+      # learnr2 is the one R package the extension needs. Until the version
+      # that runs classic learnr tutorials reaches CRAN, install it from
+      # GitHub.
+      - name: Install learnr2
+        run: Rscript -e "install.packages('pak'); pak::pak('PPBDS/learnr2')"
 
       - name: Install Node dependencies
         run: npm ci

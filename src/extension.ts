@@ -13,12 +13,16 @@ async function getMissingDeps(
     tutorialId: string,
     rscriptPath: string
 ): Promise<string[]> {
+    // learnr2 reports the R packages a tutorial needs installed locally:
+    // none for a Quarto tutorial (its exercises run in the browser via
+    // WebR), what learnr finds for a classic learnr tutorial, or NA when
+    // learnr itself is missing and there is nothing to check.
     const rCode =
-`tutorials <- learnr::available_tutorials(package = "${packageName}")
+`tutorials <- learnr2::available_tutorials(package = "${packageName}")
 row <- tutorials[tutorials$name == "${tutorialId}", ]
 if (nrow(row) == 0) quit("no", status = 0)
 deps <- row$package_dependencies[[1]]
-if (is.null(deps) || length(deps) == 0) quit("no", status = 0)
+if (is.null(deps) || length(deps) == 0 || anyNA(deps)) quit("no", status = 0)
 missing <- deps[!sapply(deps, requireNamespace, quietly = TRUE)]
 cat(paste(missing, collapse = "\\n"))
 `;

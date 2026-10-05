@@ -69,6 +69,17 @@ export function shellQuote(p: string): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * The R call that runs a tutorial. learnr2::run_tutorial() dispatches on the
+ * tutorial's format itself: a Quarto tutorial is rendered and served, a
+ * classic learnr (.Rmd) tutorial is handed to learnr::run_tutorial(). The
+ * explicit `open = TRUE` matters because the default is `interactive()`,
+ * which is FALSE under Rscript.
+ */
+function runTutorialCall(tutorialId: string, packageName: string): string {
+    return `learnr2::run_tutorial('${tutorialId}', package = '${packageName}', open = TRUE)`;
+}
+
+/**
  * Build the terminal command to run a tutorial.
  */
 export function buildRunCommand(
@@ -77,7 +88,7 @@ export function buildRunCommand(
     packageName: string
 ): string {
     const quoted = shellQuote(rscriptPath);
-    return `${quoted} -e "learnr::run_tutorial('${tutorialId}', package = '${packageName}')"`;
+    return `${quoted} -e "${runTutorialCall(tutorialId, packageName)}"`;
 }
 
 /**
@@ -91,7 +102,25 @@ export function buildInstallAndRunCommand(
 ): string {
     const quoted = shellQuote(rscriptPath);
     const installCmd = missingPackages.map(p => `'${p}'`).join(', ');
-    return `${quoted} -e "install.packages(c(${installCmd}), repos = 'https://cloud.r-project.org'); learnr::run_tutorial('${tutorialId}', package = '${packageName}')"`;
+    return `${quoted} -e "install.packages(c(${installCmd}), repos = 'https://cloud.r-project.org'); ${runTutorialCall(tutorialId, packageName)}"`;
+}
+
+// ---------------------------------------------------------------------------
+// Quarto discovery
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether the Quarto command line tool is on PATH. Quarto-format tutorials
+ * (learnr2's own) are rendered with it; classic learnr tutorials do not
+ * need it.
+ */
+export async function isQuartoAvailable(): Promise<boolean> {
+    try {
+        await execAsync('quarto --version');
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 // ---------------------------------------------------------------------------

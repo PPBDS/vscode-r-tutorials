@@ -80,7 +80,7 @@ suite('R Tutorials Extension', () => {
         const cmd = buildRunCommand('Rscript', 'intro', 'learnr');
         assert.strictEqual(
             cmd,
-            'Rscript -e "learnr::run_tutorial(\'intro\', package = \'learnr\')"'
+            'Rscript -e "learnr2::run_tutorial(\'intro\', package = \'learnr\', open = TRUE)"'
         );
     });
 
@@ -90,8 +90,21 @@ suite('R Tutorials Extension', () => {
         const cmd = buildRunCommand('/usr/local/bin/Rscript', 'r4ds-1', 'primer.tutorials');
         assert.strictEqual(
             cmd,
-            '/usr/local/bin/Rscript -e "learnr::run_tutorial(\'r4ds-1\', package = \'primer.tutorials\')"'
+            '/usr/local/bin/Rscript -e "learnr2::run_tutorial(\'r4ds-1\', package = \'primer.tutorials\', open = TRUE)"'
         );
+    });
+
+    test('buildRunCommand goes through learnr2 and forces open = TRUE', () => {
+        const { buildRunCommand } = require('../utils');
+
+        // learnr2::run_tutorial() dispatches on the tutorial's format, so one
+        // command serves both Quarto and classic learnr tutorials. Its `open`
+        // defaults to interactive(), which is FALSE under Rscript, so the
+        // command must pass open = TRUE or nothing would be served.
+        const cmd = buildRunCommand('Rscript', 'hello-learnr2', 'learnr2');
+        assert.ok(cmd.includes('learnr2::run_tutorial('), 'Should call learnr2');
+        assert.ok(!cmd.includes('learnr::run_tutorial('), 'Should not call learnr directly');
+        assert.ok(cmd.includes('open = TRUE'), 'Should force open = TRUE');
     });
 
     test('buildRunCommand with Windows path containing spaces', () => {
@@ -104,7 +117,7 @@ suite('R Tutorials Extension', () => {
             'Windows path should be quoted'
         );
         assert.ok(
-            cmd.includes("run_tutorial('hello', package = 'learnr')"),
+            cmd.includes("run_tutorial('hello', package = 'learnr', open = TRUE)"),
             'Tutorial command should be present'
         );
     });
@@ -118,7 +131,7 @@ suite('R Tutorials Extension', () => {
 
         const cmd = buildInstallAndRunCommand('Rscript', 'intro', 'learnr', ['tidyverse']);
         assert.ok(cmd.includes("install.packages(c('tidyverse')"), 'Should include install');
-        assert.ok(cmd.includes("run_tutorial('intro', package = 'learnr')"), 'Should include run');
+        assert.ok(cmd.includes("learnr2::run_tutorial('intro', package = 'learnr', open = TRUE)"), 'Should include run');
     });
 
     test('buildInstallAndRunCommand with multiple missing packages', () => {
@@ -133,7 +146,7 @@ suite('R Tutorials Extension', () => {
             'Should list all packages'
         );
         assert.ok(
-            cmd.includes("run_tutorial('sampling', package = 'primer.tutorials')"),
+            cmd.includes("learnr2::run_tutorial('sampling', package = 'primer.tutorials', open = TRUE)"),
             'Should include run'
         );
     });
@@ -197,6 +210,20 @@ suite('R Tutorials Extension', () => {
     });
 
     // ------------------------------------------------------------------
+    // isQuartoAvailable
+    // ------------------------------------------------------------------
+
+    test('isQuartoAvailable should resolve to a boolean', async function () {
+        this.timeout(TIMEOUT);
+        const { isQuartoAvailable } = require('../utils');
+
+        // Whether Quarto is installed on the test machine is not known, but
+        // the check must never throw.
+        const available = await isQuartoAvailable();
+        assert.strictEqual(typeof available, 'boolean');
+    });
+
+    // ------------------------------------------------------------------
     // isValidName
     // ------------------------------------------------------------------
 
@@ -228,23 +255,41 @@ suite('R Tutorials Extension', () => {
         const { TutorialItem } = require('../tutorialProvider');
 
         const item = new TutorialItem(
-            'mytutorial', 'mypackage', 'mytutorial',
+            'mytutorial', 'mypackage', 'mytutorial', 'rmarkdown',
             vscode.TreeItemCollapsibleState.None
         );
 
         assert.strictEqual(item.label, 'mytutorial');
         assert.strictEqual(item.packageName, 'mypackage');
         assert.strictEqual(item.tutorialId, 'mytutorial');
-        assert.strictEqual(item.tooltip, 'mypackage — mytutorial');
+        assert.strictEqual(item.format, 'rmarkdown');
+        assert.strictEqual(item.tooltip, 'mypackage — mytutorial (learnr tutorial)');
         assert.strictEqual(item.contextValue, 'tutorial');
         assert.strictEqual(item.collapsibleState, vscode.TreeItemCollapsibleState.None);
+    });
+
+    test('TutorialItem should show the format so students know what to expect', () => {
+        const { TutorialItem } = require('../tutorialProvider');
+
+        const quarto = new TutorialItem(
+            'Hello', 'learnr2', 'hello-learnr2', 'quarto',
+            vscode.TreeItemCollapsibleState.None
+        );
+        assert.strictEqual(quarto.description, 'Quarto');
+        assert.strictEqual(quarto.tooltip, 'learnr2 — hello-learnr2 (Quarto tutorial)');
+
+        const classic = new TutorialItem(
+            'Hello', 'learnr', 'hello', 'rmarkdown',
+            vscode.TreeItemCollapsibleState.None
+        );
+        assert.strictEqual(classic.description, 'learnr');
     });
 
     test('TutorialItem should not have a single-click command', () => {
         const { TutorialItem } = require('../tutorialProvider');
 
         const item = new TutorialItem(
-            'tut', 'pkg', 'tut',
+            'tut', 'pkg', 'tut', 'quarto',
             vscode.TreeItemCollapsibleState.None
         );
 
@@ -255,7 +300,7 @@ suite('R Tutorials Extension', () => {
         const { TutorialItem } = require('../tutorialProvider');
 
         const item = new TutorialItem(
-            'tut', 'pkg', 'tut',
+            'tut', 'pkg', 'tut', 'quarto',
             vscode.TreeItemCollapsibleState.None
         );
 
@@ -302,21 +347,35 @@ suite('R Tutorials Extension', () => {
         const { parseTutorialLines } = require('../tutorialProvider');
 
         const entries = parseTutorialLines(
-            'learnr\tex-data-basics\tData basics\n' +
-            'learnr\thello\tHello, Tutorial!\n'
+            'learnr\tex-data-basics\tData basics\trmarkdown\n' +
+            'learnr2\thello-learnr2\tHello, learnr2\tquarto\n'
         );
 
         assert.strictEqual(entries.length, 2);
         assert.deepStrictEqual(entries[0], {
             packageName: 'learnr',
             tutorialId: 'ex-data-basics',
-            title: 'Data basics'
+            title: 'Data basics',
+            format: 'rmarkdown'
         });
         assert.deepStrictEqual(entries[1], {
-            packageName: 'learnr',
-            tutorialId: 'hello',
-            title: 'Hello, Tutorial!'
+            packageName: 'learnr2',
+            tutorialId: 'hello-learnr2',
+            title: 'Hello, learnr2',
+            format: 'quarto'
         });
+    });
+
+    test('parseTutorialLines should treat a missing or unknown format as a learnr tutorial', () => {
+        const { parseTutorialLines } = require('../tutorialProvider');
+
+        const entries = parseTutorialLines(
+            'pkg\tthree-fields\tA Title\n' +
+            'pkg\tunknown-format\tB Title\tsomething-else\n'
+        );
+
+        assert.strictEqual(entries[0].format, 'rmarkdown');
+        assert.strictEqual(entries[1].format, 'rmarkdown');
     });
 
     test('parseTutorialLines should default title to empty when absent', () => {
@@ -388,6 +447,25 @@ suite('R Tutorials Extension', () => {
         assert.strictEqual(children[0].packageName, 'learnr');
     });
 
+    test('getChildren should carry each tutorial\'s format into its tree item', () => {
+        const { TutorialProvider, PackageItem, parseTutorialLines } =
+            require('../tutorialProvider');
+
+        const provider = new TutorialProvider();
+        const entries = parseTutorialLines(
+            'pkg\t01-classic\tClassic\trmarkdown\n' +
+            'pkg\t02-modern\tModern\tquarto\n'
+        );
+        provider['packageMap'] = new Map([['pkg', entries]]);
+
+        const children = provider.getChildren(new PackageItem('pkg', 2));
+
+        assert.deepStrictEqual(
+            children.map((c: any) => [c.tutorialId, c.format, c.description]),
+            [['01-classic', 'rmarkdown', 'learnr'], ['02-modern', 'quarto', 'Quarto']]
+        );
+    });
+
     test('getChildren should show directory names when titles collide', () => {
         const { TutorialProvider, PackageItem, parseTutorialLines } =
             require('../tutorialProvider');
@@ -441,7 +519,7 @@ suite('R Tutorials Extension', () => {
         const provider = new TutorialProvider();
 
         const item = new TutorialItem(
-            'tut', 'pkg', 'tut',
+            'tut', 'pkg', 'tut', 'quarto',
             vscode.TreeItemCollapsibleState.None
         );
 
@@ -487,9 +565,9 @@ suite('R Tutorials Extension', () => {
         // doesn't throw.
         try {
             await vscode.commands.executeCommand('rTutorials.runTutorial', {
-                packageName: 'learnr',
-                tutorialId: 'hello',
-                label: 'hello'
+                packageName: 'learnr2',
+                tutorialId: 'hello-learnr2',
+                label: 'hello-learnr2'
             });
         } catch {
             // May fail if R isn't installed — that's OK
