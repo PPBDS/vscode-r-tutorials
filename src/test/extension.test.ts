@@ -314,26 +314,29 @@ suite('R Tutorials Extension', () => {
         assert.strictEqual(item.packageName, 'mypackage');
         assert.strictEqual(item.tutorialId, 'mytutorial');
         assert.strictEqual(item.format, 'rmarkdown');
-        assert.strictEqual(item.tooltip, 'mypackage — mytutorial (learnr tutorial)');
+        assert.strictEqual(item.tooltip, 'mytutorial');
         assert.strictEqual(item.contextValue, 'tutorial');
         assert.strictEqual(item.collapsibleState, vscode.TreeItemCollapsibleState.None);
     });
 
-    test('TutorialItem should show the format so students know what to expect', () => {
+    test('TutorialItem should show only the title, with the directory name as tooltip', () => {
         const { TutorialItem } = require('../tutorialProvider');
 
+        // Neither the format nor the package name appears anywhere visible;
+        // the tooltip is just the tutorial's directory name.
         const quarto = new TutorialItem(
-            'Hello', 'learnr2', 'hello-learnr2', 'quarto',
+            'R4DS 5', 'misc.tutorials', '05-r4ds-5', 'quarto',
             vscode.TreeItemCollapsibleState.None
         );
-        assert.strictEqual(quarto.description, 'Quarto');
-        assert.strictEqual(quarto.tooltip, 'learnr2 — hello-learnr2 (Quarto tutorial)');
+        assert.strictEqual(quarto.description, '');
+        assert.strictEqual(quarto.tooltip, '05-r4ds-5');
 
         const classic = new TutorialItem(
             'Hello', 'learnr', 'hello', 'rmarkdown',
             vscode.TreeItemCollapsibleState.None
         );
-        assert.strictEqual(classic.description, 'learnr');
+        assert.strictEqual(classic.description, '');
+        assert.strictEqual(classic.tooltip, 'hello');
     });
 
     test('TutorialItem should not have a single-click command', () => {
@@ -512,8 +515,8 @@ suite('R Tutorials Extension', () => {
         const children = provider.getChildren(new PackageItem('pkg', 2));
 
         assert.deepStrictEqual(
-            children.map((c: any) => [c.tutorialId, c.format, c.description]),
-            [['01-classic', 'rmarkdown', 'learnr'], ['02-modern', 'quarto', 'Quarto']]
+            children.map((c: any) => [c.tutorialId, c.format, c.label]),
+            [['01-classic', 'rmarkdown', 'Classic'], ['02-modern', 'quarto', 'Modern']]
         );
     });
 

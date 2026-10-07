@@ -8,11 +8,6 @@ import { runRScript, isQuartoAvailable } from './utils';
  */
 export type TutorialFormat = 'quarto' | 'rmarkdown';
 
-/** Short, student-facing name for a format, shown next to each tutorial. */
-export function formatLabel(format: TutorialFormat): string {
-    return format === 'quarto' ? 'Quarto' : 'learnr';
-}
-
 // ---------------------------------------------------------------------------
 // Tree items
 // ---------------------------------------------------------------------------
@@ -41,10 +36,11 @@ export class TutorialItem extends vscode.TreeItem {
         public readonly collapsibleState: vscode.TreeItemCollapsibleState
     ) {
         super(label, collapsibleState);
-        this.tooltip = `${packageName} — ${tutorialId} (${formatLabel(format)} tutorial)`;
-        // Tell students what to expect: a Quarto tutorial opens as a page
-        // that runs in the browser; a learnr one starts a Shiny app.
-        this.description = formatLabel(format);
+        // The row is just the title; hovering shows the tutorial's directory
+        // name (e.g. "05-r4ds-5"), which is how course materials refer to it.
+        // The format is kept on the item for run-time use but not displayed.
+        this.tooltip = tutorialId;
+        this.description = '';
         // A small dot marks each tutorial. The run action is the inline play
         // button on the right; a left-hand play icon here would be a confusing
         // second triangle that does nothing when clicked.

@@ -8,7 +8,7 @@ Browse and run R package tutorials directly from the VS Code sidebar.
 * Shows both kinds of tutorial: [learnr2](https://ppbds.github.io/learnr2/)
   Quarto tutorials, which run in the browser via WebR, and classic
   [learnr](https://rstudio.github.io/learnr/) tutorials, which run as a
-  Shiny app. Each is labelled so students know what to expect.
+  Shiny app.
 * Tutorials grouped by package for easy browsing
 * Click the play button to run any tutorial directly
 * Automatically detects missing dependencies and offers to install them
