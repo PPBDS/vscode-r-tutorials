@@ -502,24 +502,55 @@ suite('R Tutorials Extension', () => {
         assert.match(capabilityNote({ learnr2: false, learnr: true }), /learnr2 is not installed/);
     });
 
-    test('listingScript asks learnr2 for Quarto only when learnr is missing', () => {
+    test('listingScript lists Quarto tutorials from learnr2 and classic ones from learnr', () => {
         const { listingScript } = require('../tutorialProvider');
-        assert.match(listingScript({ learnr2: true, learnr: true }), /learnr2::available_tutorials\(type = "all"\)/);
-        assert.match(listingScript({ learnr2: true, learnr: false }), /learnr2::available_tutorials\(type = "quarto"\)/);
+
+        const both = listingScript({ learnr2: true, learnr: true });
+        assert.match(both, /learnr2::available_tutorials\(\)/);
+        assert.match(both, /learnr::available_tutorials\(\)/);
+        // Only learnr2's quarto rows: older learnr2 also listed classic ones.
+        assert.match(both, /t2\$format\[i\] != "quarto"/);
+        // A directory learnr2 already listed is not listed again by learnr.
+        assert.match(both, /%in% seen/);
+        // Classic tutorials never carry an ordering.
+        assert.match(both, /"rmarkdown", NA\)/);
+
+        const l2only = listingScript({ learnr2: true, learnr: false });
+        assert.match(l2only, /learnr2::available_tutorials\(\)/);
+        assert.doesNotMatch(l2only, /learnr::available_tutorials/);
+
         const lonly = listingScript({ learnr2: false, learnr: true });
         assert.match(lonly, /learnr::available_tutorials\(\)/);
         assert.doesNotMatch(lonly, /learnr2::/);
     });
 
-    test('runnerFor and buildRunCommand fall back to learnr when learnr2 is missing', () => {
+    test('runnerFor picks learnr2 for Quarto and learnr for classic tutorials', () => {
         const { runnerFor } = require('../tutorialProvider');
         const { buildRunCommand } = require('../utils');
-        assert.strictEqual(runnerFor({ learnr2: true, learnr: false }), 'learnr2');
-        assert.strictEqual(runnerFor({ learnr2: false, learnr: true }), 'learnr');
-        const cmd = buildRunCommand('Rscript', 'intro', 'pkg', 'learnr');
-        assert.ok(cmd.includes("learnr::run_tutorial('intro', package = 'pkg')"), cmd);
-        assert.ok(!cmd.includes('learnr2::'), cmd);
-        assert.ok(buildRunCommand('Rscript', 'intro', 'pkg').includes('learnr2::run_tutorial'));
+
+        assert.strictEqual(runnerFor('quarto'), 'learnr2');
+        assert.strictEqual(runnerFor('rmarkdown'), 'learnr');
+
+        assert.strictEqual(
+            buildRunCommand('Rscript', 'hello', 'learnr', runnerFor('rmarkdown')),
+            'Rscript -e "learnr::run_tutorial(\'hello\', package = \'learnr\')"'
+        );
+        assert.strictEqual(
+            buildRunCommand('Rscript', '01-hello-data', 'ims.tutorials', runnerFor('quarto')),
+            'Rscript -e "learnr2::run_tutorial(\'01-hello-data\', package = \'ims.tutorials\', open = TRUE)"'
+        );
+    });
+
+    test('formatOf finds a listed tutorial\'s format, and undefined otherwise', () => {
+        const { TutorialProvider, parseTutorialLines } = require('../tutorialProvider');
+        const provider = new TutorialProvider();
+        provider['packageMap'] = new Map([
+            ['pkg', parseTutorialLines('pkg\t01-a\tA\tquarto\t\npkg\t02-b\tB\trmarkdown\t\n')]
+        ]);
+        assert.strictEqual(provider.formatOf('pkg', '01-a'), 'quarto');
+        assert.strictEqual(provider.formatOf('pkg', '02-b'), 'rmarkdown');
+        assert.strictEqual(provider.formatOf('pkg', 'nope'), undefined);
+        assert.strictEqual(provider.formatOf('other', '01-a'), undefined);
     });
 
     test('parseTutorialLines should sort by directory name, not title', () => {

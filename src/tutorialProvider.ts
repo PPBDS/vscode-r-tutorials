@@ -2,9 +2,10 @@ import * as vscode from 'vscode';
 import { runRScript, isQuartoAvailable, TutorialRunner } from './utils';
 
 /**
- * The two kinds of tutorial learnr2::available_tutorials() reports: a
- * Quarto document whose exercises run in the browser via WebR, or a classic
- * learnr R Markdown document that runs as a Shiny app.
+ * The two kinds of tutorial the view lists: a learnr2 Quarto document whose
+ * exercises run in the browser via WebR (listed and run by learnr2), or a
+ * classic learnr R Markdown document that runs as a Shiny app (listed and
+ * run by learnr).
  */
 export type TutorialFormat = 'quarto' | 'rmarkdown';
 
@@ -68,9 +69,9 @@ export interface TutorialEntry {
 }
 
 /**
- * Which tutorial packages R has. learnr2 runs Quarto tutorials and, when
- * learnr is also installed, hands classic learnr ones to it; learnr alone
- * runs only classic ones. The view shows only what can run.
+ * Which tutorial packages R has. learnr2 lists and runs Quarto tutorials;
+ * learnr lists and runs classic ones. The two are independent, and the
+ * view shows whatever the installed packages can run.
  */
 export interface Capabilities {
     learnr2: boolean;
@@ -99,38 +100,57 @@ export function capabilityNote(caps: Capabilities): string {
     return '';
 }
 
-/** Which R function runs a tutorial, given what is installed. */
-export function runnerFor(caps: Capabilities): TutorialRunner {
-    return caps.learnr2 ? 'learnr2' : 'learnr';
+/**
+ * Which R package runs a tutorial of `format`: learnr2 for Quarto, learnr
+ * for classic. learnr2 no longer hands classic tutorials to learnr, so the
+ * extension calls each directly.
+ */
+export function runnerFor(format: TutorialFormat): TutorialRunner {
+    return format === 'quarto' ? 'learnr2' : 'learnr';
 }
 
 /**
- * The R script that prints one tab-separated line per visible tutorial:
- * "package\tname\ttitle\tformat\tordering". With learnr2 it lists Quarto
- * tutorials, plus classic ones only if learnr is installed (learnr2 can see
- * an .Rmd tutorial without learnr, but cannot run it). With learnr alone,
- * learnr lists the classic ones itself. Titles are free text, so the
- * record separators (tabs, newlines) are stripped. Pure function.
+ * The R script that prints one tab-separated line per runnable tutorial:
+ * "package\tname\ttitle\tformat\tordering". Quarto tutorials come from
+ * learnr2 and classic ones from learnr, each only if that package is
+ * installed. Only learnr2's "quarto" rows are kept: learnr2 releases before
+ * 0.1.3.9003 also listed classic tutorials, and those are learnr's to list.
+ * A directory with both documents is claimed by learnr2 and not listed
+ * again. Only learnr2 tutorials carry an `ordering`; classic ones never do.
+ * Titles are free text, so the record separators are stripped. Rows are
+ * read with `$` and an index, never `[`-subset, because learnr's listing
+ * has a class whose methods break when columns are dropped. Pure function.
  */
 export function listingScript(caps: Capabilities): string {
-    const emit =
-`for (i in seq_len(nrow(tutorials))) {
-  format <- tutorials$format[i]
-  if (is.na(format)) next
-  title <- tutorials$title[i]
-  if (is.null(title) || is.na(title)) title <- ""
-  title <- gsub("[\\t\\r\\n]+", " ", title)
-  ordering <- if (is.null(tutorials$ordering)) NA else tutorials$ordering[i]
-  if (is.na(ordering)) ordering <- ""
-  cat(tutorials$package[i], "\\t", tutorials$name[i], "\\t", title, "\\t", format, "\\t", ordering, "\\n", sep = "")
+    let code =
+`emit <- function(pkg, name, title, format, ordering) {
+  title <- if (is.null(title) || is.na(title)) "" else gsub("[\\t\\r\\n]+", " ", title)
+  ordering <- if (is.null(ordering) || is.na(ordering)) "" else ordering
+  cat(pkg, "\\t", name, "\\t", title, "\\t", format, "\\t", ordering, "\\n", sep = "")
 }
+seen <- character(0)
 `;
     if (caps.learnr2) {
-        const type = caps.learnr ? 'all' : 'quarto';
-        return `tutorials <- learnr2::available_tutorials(type = "${type}")\n` + emit;
+        code +=
+`t2 <- learnr2::available_tutorials()
+for (i in seq_len(nrow(t2))) {
+  if (is.na(t2$format[i]) || t2$format[i] != "quarto") next
+  emit(t2$package[i], t2$name[i], t2$title[i], "quarto",
+       if (is.null(t2$ordering)) NA else t2$ordering[i])
+  seen <- c(seen, paste(t2$package[i], t2$name[i]))
+}
+`;
     }
-    return 'tutorials <- learnr::available_tutorials()\n' +
-        'tutorials$format <- rep("rmarkdown", nrow(tutorials))\n' + emit;
+    if (caps.learnr) {
+        code +=
+`t1 <- tryCatch(learnr::available_tutorials(), error = function(e) NULL)
+if (!is.null(t1)) for (i in seq_len(nrow(t1))) {
+  if (paste(t1$package[i], t1$name[i]) %in% seen) next
+  emit(t1$package[i], t1$name[i], t1$title[i], "rmarkdown", NA)
+}
+`;
+    }
+    return code;
 }
 
 /**
@@ -208,9 +228,9 @@ export class TutorialProvider implements vscode.TreeDataProvider<TreeNode> {
     async initialize(rscriptPath: string): Promise<void> {
         this.rscriptPath = rscriptPath;
 
-        // learnr2 runs Quarto tutorials (and classic ones, via learnr); learnr
-        // alone runs classic ones. Show only what the installed packages can
-        // run, and say what is missing in the loading message.
+        // learnr2 runs Quarto tutorials and learnr runs classic ones. Show
+        // what the installed packages can run, and say what is missing in
+        // the loading message.
         this.capabilities = await this.checkCapabilities();
         if (!this.capabilities.learnr2 && !this.capabilities.learnr) {
             // learnr2 is not on CRAN; it is installed from GitHub.
@@ -267,9 +287,8 @@ export class TutorialProvider implements vscode.TreeDataProvider<TreeNode> {
         }
 
         try {
-            // List only the tutorials the installed packages can run (see
-            // listingScript). A directory with no document (format NA) is
-            // left out.
+            // Quarto tutorials from learnr2 and classic ones from learnr,
+            // each only if installed (see listingScript).
             const rCode = listingScript(this.capabilities);
             const { stdout } = await runRScript(rCode, this.rscriptPath);
 
@@ -335,6 +354,16 @@ export class TutorialProvider implements vscode.TreeDataProvider<TreeNode> {
             this.rscriptPath = rscriptPath;
         }
         this.loadTutorials();
+    }
+
+    /**
+     * The format of a listed tutorial, or undefined if it is not listed.
+     * The run command normally gets it from the tree item; this covers a
+     * caller passing only the package and tutorial names.
+     */
+    formatOf(packageName: string, tutorialId: string): TutorialFormat | undefined {
+        return this.packageMap.get(packageName)
+            ?.find(t => t.tutorialId === tutorialId)?.format;
     }
 
     getTreeItem(element: TreeNode): vscode.TreeItem {

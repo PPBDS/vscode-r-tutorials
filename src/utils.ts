@@ -68,19 +68,19 @@ export function shellQuote(p: string): string {
 // Terminal command building (pure functions — easy to test)
 // ---------------------------------------------------------------------------
 
+/** The R package whose run_tutorial() runs a given tutorial. */
+export type TutorialRunner = 'learnr2' | 'learnr';
+
 /**
- * The R call that runs a tutorial. learnr2::run_tutorial() dispatches on the
- * tutorial's format itself: a Quarto tutorial is rendered and served, a
- * classic learnr (.Rmd) tutorial is handed to learnr::run_tutorial(). The
+ * The R call that runs a tutorial: learnr2::run_tutorial() for a Quarto
+ * tutorial, learnr::run_tutorial() for a classic one. For learnr2 the
  * explicit `open = TRUE` matters because the default is `interactive()`,
  * which is FALSE under Rscript.
  */
-export type TutorialRunner = 'learnr2' | 'learnr';
-
 function runTutorialCall(tutorialId: string, packageName: string, runner: TutorialRunner = 'learnr2'): string {
     if (runner === 'learnr') {
-        // learnr2 is not installed, so only classic tutorials are listed;
-        // this is the call learnr2 itself would hand them to.
+        // A classic learnr tutorial. learnr2 no longer runs these, so the
+        // extension calls learnr itself.
         return `learnr::run_tutorial('${tutorialId}', package = '${packageName}')`;
     }
     return `learnr2::run_tutorial('${tutorialId}', package = '${packageName}', open = TRUE)`;

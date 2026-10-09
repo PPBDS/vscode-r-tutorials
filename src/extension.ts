@@ -9,21 +9,23 @@ import {
     closeWelcomeTabs
 } from './utils';
 
+/**
+ * The R packages a classic learnr tutorial needs that are not installed,
+ * as learnr reports them. Quarto tutorials never need this: their exercises
+ * run in the browser via WebR, so the caller skips the check for them.
+ */
 async function getMissingDeps(
     packageName: string,
     tutorialId: string,
-    rscriptPath: string,
-    useLearnr2: boolean = true
+    rscriptPath: string
 ): Promise<string[]> {
-    // learnr2 reports the R packages a tutorial needs installed locally:
-    // none for a Quarto tutorial (its exercises run in the browser via
-    // WebR), what learnr finds for a classic learnr tutorial, or NA when
-    // learnr itself is missing and there is nothing to check.
+    // learnr's listing has a class whose `[` methods break when columns are
+    // dropped, so rows are read by index with `$`.
     const rCode =
-`tutorials <- ${useLearnr2 ? 'learnr2' : 'learnr'}::available_tutorials(package = "${packageName}")
-row <- tutorials[tutorials$name == "${tutorialId}", ]
-if (nrow(row) == 0) quit("no", status = 0)
-deps <- row$package_dependencies[[1]]
+`tutorials <- learnr::available_tutorials(package = "${packageName}")
+i <- match("${tutorialId}", tutorials$name)
+if (is.na(i)) quit("no", status = 0)
+deps <- tutorials$package_dependencies[[i]]
 if (is.null(deps) || length(deps) == 0 || anyNA(deps)) quit("no", status = 0)
 missing <- deps[!sapply(deps, requireNamespace, quietly = TRUE)]
 cat(paste(missing, collapse = "\\n"))
@@ -117,8 +119,16 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const runner = runnerFor(tutorialProvider.capabilities);
-            const missing = await getMissingDeps(packageName, tutorialId, rscriptPath, runner === 'learnr2');
+            // Each format has its own package: learnr2 runs Quarto tutorials,
+            // learnr runs classic ones. A caller that passes only names (no
+            // tree item) gets the format from the listing.
+            const format = item.format
+                ?? tutorialProvider.formatOf(packageName, tutorialId)
+                ?? 'quarto';
+            const runner = runnerFor(format);
+            const missing = runner === 'learnr'
+                ? await getMissingDeps(packageName, tutorialId, rscriptPath)
+                : [];
 
             if (missing.length > 0) {
                 const selection = await vscode.window.showWarningMessage(
