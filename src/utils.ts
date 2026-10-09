@@ -75,7 +75,14 @@ export function shellQuote(p: string): string {
  * explicit `open = TRUE` matters because the default is `interactive()`,
  * which is FALSE under Rscript.
  */
-function runTutorialCall(tutorialId: string, packageName: string): string {
+export type TutorialRunner = 'learnr2' | 'learnr';
+
+function runTutorialCall(tutorialId: string, packageName: string, runner: TutorialRunner = 'learnr2'): string {
+    if (runner === 'learnr') {
+        // learnr2 is not installed, so only classic tutorials are listed;
+        // this is the call learnr2 itself would hand them to.
+        return `learnr::run_tutorial('${tutorialId}', package = '${packageName}')`;
+    }
     return `learnr2::run_tutorial('${tutorialId}', package = '${packageName}', open = TRUE)`;
 }
 
@@ -85,10 +92,11 @@ function runTutorialCall(tutorialId: string, packageName: string): string {
 export function buildRunCommand(
     rscriptPath: string,
     tutorialId: string,
-    packageName: string
+    packageName: string,
+    runner: TutorialRunner = 'learnr2'
 ): string {
     const quoted = shellQuote(rscriptPath);
-    return `${quoted} -e "${runTutorialCall(tutorialId, packageName)}"`;
+    return `${quoted} -e "${runTutorialCall(tutorialId, packageName, runner)}"`;
 }
 
 /**
@@ -98,11 +106,12 @@ export function buildInstallAndRunCommand(
     rscriptPath: string,
     tutorialId: string,
     packageName: string,
-    missingPackages: string[]
+    missingPackages: string[],
+    runner: TutorialRunner = 'learnr2'
 ): string {
     const quoted = shellQuote(rscriptPath);
     const installCmd = missingPackages.map(p => `'${p}'`).join(', ');
-    return `${quoted} -e "install.packages(c(${installCmd}), repos = 'https://cloud.r-project.org'); ${runTutorialCall(tutorialId, packageName)}"`;
+    return `${quoted} -e "install.packages(c(${installCmd}), repos = 'https://cloud.r-project.org'); ${runTutorialCall(tutorialId, packageName, runner)}"`;
 }
 
 // ---------------------------------------------------------------------------

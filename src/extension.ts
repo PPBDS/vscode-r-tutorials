@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { TutorialProvider, TutorialItem } from './tutorialProvider';
+import { TutorialProvider, TutorialItem, runnerFor } from './tutorialProvider';
 import {
     runRScript,
     isValidName,
@@ -12,14 +12,15 @@ import {
 async function getMissingDeps(
     packageName: string,
     tutorialId: string,
-    rscriptPath: string
+    rscriptPath: string,
+    useLearnr2: boolean = true
 ): Promise<string[]> {
     // learnr2 reports the R packages a tutorial needs installed locally:
     // none for a Quarto tutorial (its exercises run in the browser via
     // WebR), what learnr finds for a classic learnr tutorial, or NA when
     // learnr itself is missing and there is nothing to check.
     const rCode =
-`tutorials <- learnr2::available_tutorials(package = "${packageName}")
+`tutorials <- ${useLearnr2 ? 'learnr2' : 'learnr'}::available_tutorials(package = "${packageName}")
 row <- tutorials[tutorials$name == "${tutorialId}", ]
 if (nrow(row) == 0) quit("no", status = 0)
 deps <- row$package_dependencies[[1]]
@@ -116,7 +117,8 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const missing = await getMissingDeps(packageName, tutorialId, rscriptPath);
+            const runner = runnerFor(tutorialProvider.capabilities);
+            const missing = await getMissingDeps(packageName, tutorialId, rscriptPath, runner === 'learnr2');
 
             if (missing.length > 0) {
                 const selection = await vscode.window.showWarningMessage(
@@ -130,14 +132,14 @@ export function activate(context: vscode.ExtensionContext) {
                 const terminal = vscode.window.createTerminal('R Tutorial');
                 terminal.show();
                 terminal.sendText(
-                    buildInstallAndRunCommand(rscriptPath, tutorialId, packageName, missing)
+                    buildInstallAndRunCommand(rscriptPath, tutorialId, packageName, missing, runner)
                 );
                 return;
             }
 
             const terminal = vscode.window.createTerminal('R Tutorial');
             terminal.show();
-            terminal.sendText(buildRunCommand(rscriptPath, tutorialId, packageName));
+            terminal.sendText(buildRunCommand(rscriptPath, tutorialId, packageName, runner));
         }
     );
 
