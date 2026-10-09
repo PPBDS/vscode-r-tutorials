@@ -410,13 +410,15 @@ suite('R Tutorials Extension', () => {
             packageName: 'learnr',
             tutorialId: 'ex-data-basics',
             title: 'Data basics',
-            format: 'rmarkdown'
+            format: 'rmarkdown',
+            ordering: null
         });
         assert.deepStrictEqual(entries[1], {
             packageName: 'learnr2',
             tutorialId: 'hello-learnr2',
             title: 'Hello, learnr2',
-            format: 'quarto'
+            format: 'quarto',
+            ordering: null
         });
     });
 
@@ -454,6 +456,70 @@ suite('R Tutorials Extension', () => {
 
         assert.strictEqual(entries.length, 1);
         assert.strictEqual(entries[0].tutorialId, 'good-one');
+    });
+
+    // ------------------------------------------------------------------
+    // learnr2: ordering: (YAML) and the learnr / learnr2 capability rule
+    // ------------------------------------------------------------------
+
+    test('parseTutorialLines reads ordering and sorts ordered tutorials first', () => {
+        const { parseTutorialLines } = require('../tutorialProvider');
+        const entries = parseTutorialLines(
+            'pkg\t01-a\tA\tquarto\t\n' +      // no ordering
+            'pkg\t02-b\tB\tquarto\t2\n' +
+            'pkg\t03-c\tC\tquarto\t1\n' +
+            'pkg\t10-d\tD\tquarto\tnot-a-number\n' +
+            'pkg\t04-e\tE\tquarto\t2\n'       // ties broken by directory name
+        );
+        assert.deepStrictEqual(entries.map((e: any) => e.tutorialId),
+            ['03-c', '02-b', '04-e', '01-a', '10-d']);
+        assert.strictEqual(entries[0].ordering, 1);
+        assert.strictEqual(entries[3].ordering, null);
+        assert.strictEqual(entries[4].ordering, null, 'a non-number is ignored');
+    });
+
+    test('ordering applies within a package, packages stay alphabetical', () => {
+        const { parseTutorialLines } = require('../tutorialProvider');
+        const entries = parseTutorialLines(
+            'zpkg\t01-x\tX\tquarto\t1\n' +
+            'apkg\t09-y\tY\tquarto\t\n'
+        );
+        assert.deepStrictEqual(entries.map((e: any) => e.packageName), ['apkg', 'zpkg']);
+    });
+
+    test('visibleFormats shows only what the installed packages can run', () => {
+        const { visibleFormats } = require('../tutorialProvider');
+        assert.deepStrictEqual(visibleFormats({ learnr2: true, learnr: true }), ['quarto', 'rmarkdown']);
+        assert.deepStrictEqual(visibleFormats({ learnr2: true, learnr: false }), ['quarto']);
+        assert.deepStrictEqual(visibleFormats({ learnr2: false, learnr: true }), ['rmarkdown']);
+        assert.deepStrictEqual(visibleFormats({ learnr2: false, learnr: false }), []);
+    });
+
+    test('capabilityNote names the missing package, and says nothing when both are installed', () => {
+        const { capabilityNote } = require('../tutorialProvider');
+        assert.strictEqual(capabilityNote({ learnr2: true, learnr: true }), '');
+        assert.match(capabilityNote({ learnr2: true, learnr: false }), /learnr is not installed/);
+        assert.match(capabilityNote({ learnr2: false, learnr: true }), /learnr2 is not installed/);
+    });
+
+    test('listingScript asks learnr2 for Quarto only when learnr is missing', () => {
+        const { listingScript } = require('../tutorialProvider');
+        assert.match(listingScript({ learnr2: true, learnr: true }), /learnr2::available_tutorials\(type = "all"\)/);
+        assert.match(listingScript({ learnr2: true, learnr: false }), /learnr2::available_tutorials\(type = "quarto"\)/);
+        const lonly = listingScript({ learnr2: false, learnr: true });
+        assert.match(lonly, /learnr::available_tutorials\(\)/);
+        assert.doesNotMatch(lonly, /learnr2::/);
+    });
+
+    test('runnerFor and buildRunCommand fall back to learnr when learnr2 is missing', () => {
+        const { runnerFor } = require('../tutorialProvider');
+        const { buildRunCommand } = require('../utils');
+        assert.strictEqual(runnerFor({ learnr2: true, learnr: false }), 'learnr2');
+        assert.strictEqual(runnerFor({ learnr2: false, learnr: true }), 'learnr');
+        const cmd = buildRunCommand('Rscript', 'intro', 'pkg', 'learnr');
+        assert.ok(cmd.includes("learnr::run_tutorial('intro', package = 'pkg')"), cmd);
+        assert.ok(!cmd.includes('learnr2::'), cmd);
+        assert.ok(buildRunCommand('Rscript', 'intro', 'pkg').includes('learnr2::run_tutorial'));
     });
 
     test('parseTutorialLines should sort by directory name, not title', () => {

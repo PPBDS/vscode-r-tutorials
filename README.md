@@ -9,7 +9,8 @@ Browse and run R package tutorials directly from the VS Code sidebar.
   Quarto tutorials, which run in the browser via WebR, and classic
   [learnr](https://rstudio.github.io/learnr/) tutorials, which run as a
   Shiny app.
-* Tutorials grouped by package for easy browsing
+* Tutorials grouped by package for easy browsing, in the order the
+  package author intends (see "Tutorial order" below)
 * Click the play button to run any tutorial directly
 * Automatically detects missing dependencies and offers to install them
 * Refresh button to update the tutorial list after installing new packages
@@ -18,16 +19,23 @@ Browse and run R package tutorials directly from the VS Code sidebar.
 ## Requirements
 
 * [R](https://cran.r-project.org/) installed
-* The [learnr2](https://ppbds.github.io/learnr2/) R package. It lists and
-  runs both kinds of tutorial. It is not on CRAN, so install it from GitHub:
+* The [learnr2](https://ppbds.github.io/learnr2/) R package, the
+  [learnr](https://rstudio.github.io/learnr/) package, or both. The panel
+  shows only the tutorials that can actually run:
+
+  | Installed | Tutorials shown |
+  |---|---|
+  | learnr2 and learnr | both kinds |
+  | learnr2 only | Quarto (learnr2) tutorials |
+  | learnr only | classic learnr tutorials |
+
+  When one of the two is missing, the panel's loading message says so.
+  learnr2 is not on CRAN, so install it from GitHub:
 
   ```r
   install.packages("pak")
   pak::pak("PPBDS/learnr2")
   ```
-
-  Packages that bundle classic learnr tutorials already depend on learnr, so
-  nothing else needs installing for those.
 * The [Quarto](https://quarto.org/docs/get-started/) command line tool, for
   Quarto tutorials. Classic learnr tutorials do not need it.
 
@@ -42,6 +50,21 @@ in settings (see below).
 2. Expand a package to see its tutorials
 3. Use **⌥⌘F** (Mac) or **Ctrl+Alt+F** (Windows/Linux) to filter
 4. Click the arrow to the right of the tutorial name to run it
+
+## Tutorial order
+
+Within a package, tutorials appear in the order of their directory names,
+so authors usually number them (`01-intro`, `02-data`, …). A Quarto
+tutorial can instead set its position in its YAML header, without renaming
+its directory:
+
+```yaml
+learnr2:
+  ordering: 3
+```
+
+Tutorials that set `ordering` come first, lowest first; the rest follow in
+directory-name order. (Needs learnr2 0.1.3.9002 or later.)
 
 ## Settings
 
